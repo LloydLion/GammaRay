@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36221.1 d17.14
+VisualStudioVersion = 17.14.36221.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GammaRay.Core", "GammaRay.Core\GammaRay.Core.csproj", "{5C208AF9-F076-481C-8773-2AA93A26EDA8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GammaRay.Core.Windows", "GammaRay.Core.Windows\GammaRay.Core.Windows.csproj", "{5F378F2B-010F-48AE-B9BC-0BE6E67BE2C1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GammaRay.Console", "GammaRay.Console\GammaRay.Console.csproj", "{954B7D7D-9A21-4A74-9691-9C564FD31BE3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{5F378F2B-010F-48AE-B9BC-0BE6E67BE2C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5F378F2B-010F-48AE-B9BC-0BE6E67BE2C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5F378F2B-010F-48AE-B9BC-0BE6E67BE2C1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{954B7D7D-9A21-4A74-9691-9C564FD31BE3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{954B7D7D-9A21-4A74-9691-9C564FD31BE3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{954B7D7D-9A21-4A74-9691-9C564FD31BE3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{954B7D7D-9A21-4A74-9691-9C564FD31BE3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
