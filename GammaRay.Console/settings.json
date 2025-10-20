@@ -1,0 +1,57 @@
+﻿{
+	"inbounds":
+	{
+		"localhost":
+		{
+			"protocol": "http",
+			"endpoint": "127.0.0.1:9999"
+		}
+	},
+
+	"configurations":
+	{
+		"direct":
+		{
+
+		},
+
+		"proxy":
+		{
+			"proxyServer": "127.0.0.1:1083"
+		}
+	},
+
+	"priorityQueues":
+	{
+		"speed": [ "direct", "proxy" ],
+		"proxy": [ "proxy" ]
+	},
+
+	"networkProfiles":
+	{
+		"main": { }
+	},
+
+	"categories":
+	{
+		"forceBlocked":
+		{
+			"list": "site.txt"
+		},
+
+		"default":
+		{
+			"isDefault": true
+		}
+	},
+
+	"routeGrid":
+	{
+		"profilesOrder": [ "main" ],
+		"grid":
+		{
+			"forceBlocked": [ "proxy" ],
+			"default": [ "speed" ]
+		}
+	}
+}

@@ -3,7 +3,7 @@ using System.Net;
 
 namespace GammaRay.Core.Probing;
 
-internal class HttpsSiteProber : ISiteProber
+public class HttpsSiteProber : ISiteProber
 {
 	private readonly Dictionary<string, ConfiguratedClient> _configurations;
 
@@ -15,7 +15,7 @@ internal class HttpsSiteProber : ISiteProber
 			var handler = new HttpClientHandler()
 			{
 				UseProxy = s.ProxyServer is not null,
-				Proxy = s.ProxyServer is not null ? new WebProxy(s.ProxyServer) : null
+				Proxy = s.ProxyServer is not null ? new WebProxy(s.ProxyServer.Address.ToString(), s.ProxyServer.Port) : null
 			};
 
 			var client = new HttpClient(handler, true)

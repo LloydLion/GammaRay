@@ -112,7 +112,7 @@ public class ProxyServer
 	static async Task HandleConnectDirect(ProxyContext context, HttpEndPoint endPoint)
 	{
 		using var server = new TcpClient();
-		await server.ConnectAsync(endPoint.Host, endPoint.Port);
+		await server.ConnectAsync(endPoint);
 		using var serverStream = server.GetStream();
 
 		await context.Stream.WriteAsync(ConnectionEstablishedMessage);
@@ -144,7 +144,7 @@ public class ProxyServer
 	static async Task HandleHttpDirect(ProxyContext context, HttpEndPoint endPoint, HttpRequestHeader header)
 	{
 		using var server = new TcpClient();
-		await server.ConnectAsync(endPoint.Host, endPoint.Port);
+		await server.ConnectAsync(endPoint);
 		using var serverStream = server.GetStream();
 
 		header.Headers.RemoveAll(ProxyConnectionHeader);
@@ -157,7 +157,7 @@ public class ProxyServer
 	static async Task HandleHttpViaProxy(ProxyContext context, HttpEndPoint endPoint, IPEndPoint upstreamProxy, HttpRequestHeader header)
 	{
 		using var proxy = new TcpClient();
-		await proxy.ConnectAsync(endPoint.Host, endPoint.Port);
+		await proxy.ConnectAsync(endPoint);
 		using var proxyStream = proxy.GetStream();
 
 		await proxyStream.WriteAsync(Encoding.UTF8.GetBytes(header.Serialize()));

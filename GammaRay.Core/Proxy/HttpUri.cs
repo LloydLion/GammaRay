@@ -54,6 +54,6 @@ public record HttpUri(string? Schema, HttpEndPoint EndPoint, string? Path, strin
 				query = queryParts[1];
 		}
 
-		return new HttpUri(schema, new HttpEndPoint(endpointParts[0], port), path, query);
+		return new HttpUri(schema, new HttpEndPoint(new Site(endpointParts[0]), port), path, query);
 	}
 }

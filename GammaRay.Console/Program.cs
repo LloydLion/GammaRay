@@ -1,32 +1,53 @@
-﻿using GammaRay.Core.Proxy;
+﻿using GammaRay.Core.Network;
+using GammaRay.Core.Probing;
+using GammaRay.Core.Proxy;
+using GammaRay.Core.Routing;
+using GammaRay.Core.Settings;
+using GammaRay.Core.Windows.Network;
 using Microsoft.Extensions.Options;
 using System.Net;
-using HttpRequestHeader = GammaRay.Core.Proxy.HttpRequestHeader;
 
+
+var settingsProvider = new SettingsProvider(Options.Create(new SettingsProvider.Options() { SettingsFilePath = "settings.json" }));
+settingsProvider.LoadSettings();
+
+var netId = new WindowsNetProfileBasedNetworkIdentifier();
+
+var prober = new HttpsSiteProber(settingsProvider.GetConfigurations());
+var analyzer = new SimpleProbeResultsAnalyzer();
+var networkProfileRepository = new StubNetworkProfileRepository(settingsProvider.RegisteredProfiles.First());
+
+var router = new SmartRouter(settingsProvider, settingsProvider, networkProfileRepository, settingsProvider, netId, prober, analyzer);
 
 var proxy = new ProxyServer(Options.Create(new ProxyServer.Options
 {
-	ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 9999)
-}), new Router());
+	ListenEndPoint = IPEndPoint.Parse(settingsProvider.Inbounds.First().Value.EndPoint)
+}), router);
 
 proxy.Run();
 
 
-public class Router : IProxyServerRouter
+
+
+
+public class StubNetworkProfileRepository : INetworkProfileRepository
 {
-	public Task<ProxyRoutingResult> RouteConnectAsync(ProxyContext context, HttpEndPoint targetHost)
+	public StubNetworkProfileRepository(NetworkProfile profile)
 	{
-		if (targetHost.Host.EndsWith(".ru"))
-			return Task.FromResult<ProxyRoutingResult>(new DirectProxyRoutingResult());
-		else
-			return Task.FromResult<ProxyRoutingResult>(new UpstreamProxyRoutingResult(new IPEndPoint(IPAddress.Loopback, 1080)));
+		DefaultProfile = profile;
 	}
 
-	public Task<ProxyRoutingResult> RouteHttpAsync(ProxyContext context, HttpEndPoint targetHost, HttpRequestHeader header)
+
+	public NetworkProfile DefaultProfile { get; }
+
+
+	public NetworkProfile GetProfileForNetwork(NetworkIdentity network)
 	{
-		if (targetHost.Host.EndsWith(".ru"))
-			return Task.FromResult<ProxyRoutingResult>(new DirectProxyRoutingResult());
-		else
-			return Task.FromResult<ProxyRoutingResult>(new UpstreamProxyRoutingResult(new IPEndPoint(IPAddress.Loopback, 1080)));
+		return DefaultProfile;
+	}
+
+	public IEnumerable<NetworkIdentity> ListProfileNetworks(NetworkProfile profile)
+	{
+		return [];
 	}
 }
