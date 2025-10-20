@@ -3,15 +3,16 @@ using GammaRay.Core.Probing;
 using GammaRay.Core.Proxy;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Settings;
-using GammaRay.Core.Windows.Network;
+//using GammaRay.Core.Windows.Network;
 using Microsoft.Extensions.Options;
+using GammaRay.Core.Linux.Network;
 using System.Net;
 
 
 var settingsProvider = new SettingsProvider(Options.Create(new SettingsProvider.Options() { SettingsFilePath = "settings.json" }));
 settingsProvider.LoadSettings();
 
-var netId = new WindowsNetProfileBasedNetworkIdentifier();
+var netId = new LinuxNetProfileBasedNetworkIdentifier();
 
 var prober = new HttpsSiteProber(settingsProvider.GetConfigurations());
 var analyzer = new SimpleProbeResultsAnalyzer();
