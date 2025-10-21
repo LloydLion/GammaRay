@@ -19,7 +19,8 @@ var prober = new HttpsSiteProber(settingsProvider.GetConfigurations());
 var analyzer = new SimpleProbeResultsAnalyzer();
 var networkProfileRepository = new StubNetworkProfileRepository(settingsProvider.RegisteredProfiles.First());
 
-var storage = new RoutePersistenceStorage();
+var storage = new RoutePersistenceStorage(Options.Create(new RoutePersistenceStorage.Options()));
+
 storage.PreloadDatabase();
 
 var router = new SmartRouter(settingsProvider, settingsProvider, networkProfileRepository, settingsProvider, netId, prober, analyzer, storage);

@@ -8,14 +8,14 @@ public class SmartRouter(
 	IDomainCategorizer _domainCategorizer,
 	IConfigurationsProvider _configurations,
 	INetworkProfileRepository _profiles,
-	IRouteGridProvider _netMap,
+	IRouteGridProvider _routeGrid,
 	INetworkIdentifier _networkIdentifier,
 	ISiteProber _prober,
 	IProbeResultsAnalyzer _analyzer,
 	IRoutePersistenceStorage _storage
 ) : IProxyServerRouter
 {
-	private readonly HashSet<(string Profile, Site Site)> _probingNow = new();
+	private readonly HashSet<(string Profile, Site Site)> _probingNow = [];
 
 
 	public Task<ProxyRoutingResult> RouteHttpAsync(ProxyContext context, HttpEndPoint targetHost, HttpRequestHeader header) =>
@@ -23,10 +23,10 @@ public class SmartRouter(
 
 	public Task<ProxyRoutingResult> RouteConnectAsync(ProxyContext context, HttpEndPoint targetHost)
 	{
-		return Task.FromResult(RouteConnectAsync(targetHost));
+		return Task.FromResult(RouteConnect(targetHost));
 	}
 
-	private ProxyRoutingResult RouteConnectAsync(HttpEndPoint targetHost)
+	private ProxyRoutingResult RouteConnect(HttpEndPoint targetHost)
 	{
 		var currentNetwork = _networkIdentifier.CurrentIdentity;
 		var profile = _profiles.GetProfileForNetwork(currentNetwork);
@@ -35,19 +35,16 @@ public class SmartRouter(
 		var route = _storage.TryGetRoute(targetHost.Host, profile);
 		if (route is null)
 		{
-			lock (_probingNow)
-			{
-				bool shouldStartNewProbingTask = _probingNow.Add((profile.Name, targetHost.Host));
+			bool shouldStartNewProbingTask = _probingNow.Add((profile.Name, targetHost.Host));
 
-				var category = _domainCategorizer.GetCategoryForDomain(targetHost.Host.DomainName);
-				var queueName = _netMap.GetConfigurationQueueName(profile, category);
-				var queue = _configurations.GetConfigurationQueue(queueName);
+			var category = _domainCategorizer.GetCategoryForDomain(targetHost.Host.DomainName);
+			var queueName = _routeGrid.GetConfigurationQueueName(profile, category);
+			var queue = _configurations.GetConfigurationQueue(queueName);
 
-				if (shouldStartNewProbingTask)
-					StartBackgroundProbing(targetHost.Host, profile, queue);
+			if (shouldStartNewProbingTask)
+				StartBackgroundProbing(targetHost.Host, profile, queue);
 
-				config = queue.OrderedConfigurations.Last();
-			}
+			config = queue.OrderedConfigurations.Last();
 		}
 		else config = _configurations.GetConfiguration(route);
 
@@ -62,7 +59,6 @@ public class SmartRouter(
 		try
 		{
 			Console.WriteLine($"STARTED PROBING for {profile.Name}\\'{site.DomainName}'");
-
 
 			string theBestConfigName;
 			if (queue.OrderedConfigurations.Count() != 1)
@@ -95,13 +91,7 @@ public class SmartRouter(
 		}
 		finally
 		{
-			lock (_probingNow)
-			{
-				_probingNow.Remove((profile.Name, site));
-			}
+			_probingNow.Remove((profile.Name, site));
 		}
 	}
-
-
-	private record ResolvedDomain(string OptimalConfigurationName);
 }

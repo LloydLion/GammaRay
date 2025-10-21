@@ -1,20 +1,23 @@
 ﻿using GammaRay.Core.Routing;
-using System.Collections.Concurrent;
+using Microsoft.Extensions.Options;
 
 namespace GammaRay.Core.Persistence;
 
-public class RoutePersistenceStorage : IRoutePersistenceStorage
+public class RoutePersistenceStorage(
+	IOptions<RoutePersistenceStorage.Options> options
+) : IRoutePersistenceStorage
 {
-	private const string Path = "routes.dat";
+	private readonly Options _options = options.Value;
 	private readonly SemaphoreSlim _semaphore = new(1);
-	private ConcurrentDictionary<(string Site, string Profile), string>? _data;
+	private Dictionary<(string Site, string Profile), string>? _data;
 
-	public ConcurrentDictionary<(string Site, string Profile), string> Data => _data ?? throw new InvalidOperationException("Preload database first");
+
+	public Dictionary<(string Site, string Profile), string> Data => _data ?? throw new InvalidOperationException("Preload database first");
 
 
 	public void SaveRoute(Site site, NetworkProfile profile, string optimalConfigurationName)
 	{
-		Data.AddOrUpdate((site.DomainName, profile.Name), optimalConfigurationName, (key, value) => value);
+		Data[(site.DomainName, profile.Name)] = optimalConfigurationName;
 		SaveDatabase();
 	}
 
@@ -25,18 +28,16 @@ public class RoutePersistenceStorage : IRoutePersistenceStorage
 
 	public void PreloadDatabase()
 	{
-		if (File.Exists(Path) == false)
+		if (File.Exists(_options.DatabasePath) == false)
 		{
-			_data = new();
+			_data = [];
 			return;
 		}
 
-		_data = new ConcurrentDictionary<(string Site, string Profile), string>
-			(File.ReadAllLines(Path)
+		_data = File.ReadAllLines(_options.DatabasePath)
 			.Select(s => s.Split('|'))
 			.Where(s => s.Length == 3)
-			.ToDictionary(s => (s[0], s[1]), s => s[2])
-		);
+			.ToDictionary(s => (s[0], s[1]), s => s[2]);
 	}
 
 	private async void SaveDatabase()
@@ -48,7 +49,7 @@ public class RoutePersistenceStorage : IRoutePersistenceStorage
 			await _semaphore.WaitAsync();
 
 			var dataCopy = Data.ToDictionary();
-			await File.WriteAllLinesAsync(Path, dataCopy.Select(s => $"{s.Key.Site}|{s.Key.Profile}|{s.Value}"));
+			await File.WriteAllLinesAsync(_options.DatabasePath, dataCopy.Select(s => $"{s.Key.Site}|{s.Key.Profile}|{s.Value}"));
 		}
 		catch (Exception ex)
 		{
@@ -60,5 +61,11 @@ public class RoutePersistenceStorage : IRoutePersistenceStorage
 		{
 			_semaphore.Release();
 		}
+	}
+
+
+	public class Options
+	{
+		public string DatabasePath { get; set; } = "routes.dat";
 	}
 }

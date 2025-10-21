@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Options;
+using Nito.AsyncEx;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -26,25 +27,44 @@ public class ProxyServer
 	}
 
 
-	public void Run()
+	public void Run(CancellationToken token = default)
 	{
 		var listener = new TcpListener(_options.ListenEndPoint);
 		listener.Start();
 
-		while (true)
+		AsyncContext.Run(async () =>
 		{
-			var client = listener.AcceptTcpClient();
-			_stats.NewClient();
+			var onlineClients = new HashSet<Task>();
 
-			Console.WriteLine($"NEW CLIENT: IPEP={client.Client.RemoteEndPoint}, STATS=({_stats})");
+			try
+			{
+				while (token.IsCancellationRequested == false)
+				{
+					TcpClient client;
+					try
+					{ client = await listener.AcceptTcpClientAsync(token); }
+					catch (TaskCanceledException) { break; }
 
-			Task.Run(() => HandleClientAsync(client));
-		}
+					_stats.NewClient();
+
+					Console.WriteLine($"NEW CLIENT: IPEP={client.Client.RemoteEndPoint}, STATS=({_stats})");
+
+					onlineClients.Add(HandleClientAsync(client));
+				}
+			}
+			finally
+			{
+				await Task.WhenAll(onlineClients);
+			}
+
+		});
 	}
 
 
 	private async Task HandleClientAsync(TcpClient client)
 	{
+		await Task.Yield();
+
 		using var context = new ProxyContext(client, this);
 		context.Stream.ReadTimeout = (int)_options.ReadTimeout.TotalMilliseconds;
 

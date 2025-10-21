@@ -12,7 +12,6 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 
 
 	private readonly Timer _timer;
-	private readonly object _syncRoot = new();
 	private DateTime? _lastRefresh;
 	private NetworkIdentity? _identity;
 	private int _isRefreshing = 0;
@@ -27,9 +26,9 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 
 	public OSPlatform TargetPlatform { get; }
 
-	public DateTime LastRefresh { get { if (_lastRefresh.HasValue == false) Initialize(); return _lastRefresh.Value; } }
+	public DateTime LastRefresh { get { InitializeIfNeed(); return _lastRefresh.Value; } }
 
-	public NetworkIdentity CurrentIdentity { get { if (_identity.HasValue == false) Initialize(); return _identity.Value; } }
+	public NetworkIdentity CurrentIdentity { get { InitializeIfNeed(); return _identity.Value; } }
 
 
 	protected abstract NetworkIdentity FetchCurrentNetworkIdentity();
@@ -54,22 +53,19 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 	}
 
 	[MemberNotNull(nameof(_identity), nameof(_lastRefresh))]
-	private void Initialize()
+	private void InitializeIfNeed()
 	{
-		lock (_syncRoot)
-		{
-			if (_identity.HasValue && _lastRefresh.HasValue)
-				return;
+		if (_identity.HasValue && _lastRefresh.HasValue)
+			return;
 
-			_identity = FetchCurrentNetworkIdentity();
-			_lastRefresh = DateTime.UtcNow;
+		_identity = FetchCurrentNetworkIdentity();
+		_lastRefresh = DateTime.UtcNow;
 
-			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine("NEW NETWORK " + _identity.Value.SerializeToString());
-			Console.ResetColor();
+		Console.ForegroundColor = ConsoleColor.Red;
+		Console.WriteLine("NEW NETWORK " + _identity.Value.SerializeToString());
+		Console.ResetColor();
 
-			NetworkChange.NetworkAddressChanged += NetworkChanged;
-		}
+		NetworkChange.NetworkAddressChanged += NetworkChanged;
 	}
 
 	private void NetworkChanged(object? sender, EventArgs e)
@@ -87,15 +83,12 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 
 		try
 		{
-			lock (_syncRoot)
-			{
-				_identity = FetchCurrentNetworkIdentity();
-				_lastRefresh = DateTime.UtcNow;
+			_identity = FetchCurrentNetworkIdentity();
+			_lastRefresh = DateTime.UtcNow;
 
-				Console.ForegroundColor = ConsoleColor.Red;
-				Console.WriteLine("NEW NETWORK " + _identity.Value.SerializeToString());
-				Console.ResetColor();
-			}
+			Console.ForegroundColor = ConsoleColor.Red;
+			Console.WriteLine("NEW NETWORK " + _identity.Value.SerializeToString());
+			Console.ResetColor();
 		}
 		catch (Exception ex)
 		{
