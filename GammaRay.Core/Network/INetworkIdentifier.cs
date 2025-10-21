@@ -6,5 +6,7 @@ public interface INetworkIdentifier
 {
 	public OSPlatform TargetPlatform { get; }
 
-	public NetworkIdentity FetchCurrentNetworkIdentity();
+	public DateTime LastRefresh { get; }
+
+	public NetworkIdentity CurrentIdentity { get; }
 }

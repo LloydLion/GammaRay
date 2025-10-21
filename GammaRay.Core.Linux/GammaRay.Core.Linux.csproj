@@ -6,7 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-
   <ItemGroup>
     <ProjectReference Include="..\GammaRay.Core\GammaRay.Core.csproj" />
   </ItemGroup>

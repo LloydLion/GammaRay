@@ -1,7 +1,6 @@
 ﻿using GammaRay.Core.Network;
 using GammaRay.Core.Probing;
 using GammaRay.Core.Proxy;
-using System.Collections.Concurrent;
 
 namespace GammaRay.Core.Routing;
 
@@ -12,10 +11,11 @@ public class SmartRouter(
 	IRouteGridProvider _netMap,
 	INetworkIdentifier _networkIdentifier,
 	ISiteProber _prober,
-	IProbeResultsAnalyzer _analyzer
+	IProbeResultsAnalyzer _analyzer,
+	IRoutePersistenceStorage _storage
 ) : IProxyServerRouter
 {
-	private readonly ConcurrentDictionary<(Site, string), ResolvedDomain?> _routed = new();
+	private readonly HashSet<(string Profile, Site Site)> _probingNow = new();
 
 
 	public Task<ProxyRoutingResult> RouteHttpAsync(ProxyContext context, HttpEndPoint targetHost, HttpRequestHeader header) =>
@@ -28,37 +28,41 @@ public class SmartRouter(
 
 	private ProxyRoutingResult RouteConnectAsync(HttpEndPoint targetHost)
 	{
-		var currentNetwork = _networkIdentifier.FetchCurrentNetworkIdentity();
+		var currentNetwork = _networkIdentifier.CurrentIdentity;
 		var profile = _profiles.GetProfileForNetwork(currentNetwork);
 
-		bool createdNew = false;
-		var resolvedDomain = _routed.GetOrAdd((targetHost.Host, profile.Name), (_) => { createdNew = true; return null; });
+		NetClientConfiguration config;
+		var route = _storage.TryGetRoute(targetHost.Host, profile);
+		if (route is null)
+		{
+			lock (_probingNow)
+			{
+				bool shouldStartNewProbingTask = _probingNow.Add((profile.Name, targetHost.Host));
 
-		if (createdNew)
-			StartBackgroundProbing(targetHost.Host, profile);
+				var category = _domainCategorizer.GetCategoryForDomain(targetHost.Host.DomainName);
+				var queueName = _netMap.GetConfigurationQueueName(profile, category);
+				var queue = _configurations.GetConfigurationQueue(queueName);
 
-		if (resolvedDomain is null)
-			return new DirectProxyRoutingResult();
+				if (shouldStartNewProbingTask)
+					StartBackgroundProbing(targetHost.Host, profile, queue);
 
-		var config = _configurations.GetConfiguration(resolvedDomain.OptimalConfigurationName);
+				config = queue.OrderedConfigurations.Last();
+			}
+		}
+		else config = _configurations.GetConfiguration(route);
+
 		if (config.ProxyServer is null)
 			return new DirectProxyRoutingResult();
 		else
 			return new UpstreamProxyRoutingResult(config.ProxyServer);
 	}
 
-	private async void StartBackgroundProbing(Site site, NetworkProfile profile)
+	private async void StartBackgroundProbing(Site site, NetworkProfile profile, ClientConfigurationQueue queue)
 	{
-		await Task.Yield();
 		try
 		{
 			Console.WriteLine($"STARTED PROBING for {profile.Name}\\'{site.DomainName}'");
 
-			var category = _domainCategorizer.GetCategoryForDomain(site.DomainName);
-
-			var queueName = _netMap.GetConfigurationQueueName(profile, category);
-
-			var queue = _configurations.GetConfigurationQueue(queueName);
 
 			string theBestConfigName;
 			if (queue.OrderedConfigurations.Count() != 1)
@@ -81,14 +85,20 @@ public class SmartRouter(
 				theBestConfigName = queue.OrderedConfigurations.Single().Name;
 			}
 
-			_routed[(site, profile.Name)] = new ResolvedDomain(theBestConfigName);
+			_storage.SaveRoute(site, profile, theBestConfigName);
 
 			Console.WriteLine($"FINISHED PROBING for {profile.Name}\\'{site.DomainName}' -> {theBestConfigName}");
 		}
 		catch (Exception ex)
 		{
 			Console.WriteLine($"FAILED PROBING for {profile.Name}\\'{site.DomainName}': {ex}");
-			_routed.TryRemove((site, profile.Name), out _);
+		}
+		finally
+		{
+			lock (_probingNow)
+			{
+				_probingNow.Remove((profile.Name, site));
+			}
 		}
 	}
 

@@ -7,7 +7,7 @@ namespace GammaRay.Core.Windows.Network;
 
 public class WindowsNetProfileBasedNetworkIdentifier() : NetworkIdentifierBase(OSPlatform.Windows)
 {
-	public override NetworkIdentity FetchCurrentNetworkIdentity()
+	protected override NetworkIdentity FetchCurrentNetworkIdentity()
 	{
 		var internetInterfaceIP = TraceRouteToInternet();
 		var internetInterface = GetInterfaceByIP(internetInterfaceIP);
