@@ -2,9 +2,12 @@
 using System.Management;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace GammaRay.Core.Windows.Network;
 
+
+[SupportedOSPlatform("windows")]
 public class WindowsNetProfileBasedNetworkIdentifier() : NetworkIdentifierBase(OSPlatform.Windows)
 {
 	protected override NetworkIdentity FetchCurrentNetworkIdentity()
@@ -35,4 +38,5 @@ public class WindowsNetProfileBasedNetworkIdentifier() : NetworkIdentifierBase(O
 
 		throw new Exception($"No Windows network profile for \"{networkInterface.Name}\"");
 	}
+
 }

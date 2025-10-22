@@ -9,15 +9,16 @@ namespace GammaRay.Core.Proxy;
 public class ProxyServer
 {
 	private const string ProxyConnectionHeader = "Proxy-Connection";
+	private const string ConnectionHeader = "Connection";
+
 	private static readonly string ConnectionEstablishedMessageString =
-		new HttpResponseHeader(200, "Connection established", HttpMessageHeader.HTTP11, new HttpHeadersCollection()).Serialize();
+		new HttpResponseHeader(200, "Connection established", HttpMessageHeader.HTTP11, []).Serialize();
 	private static readonly byte[] ConnectionEstablishedMessage =
 		Encoding.UTF8.GetBytes(ConnectionEstablishedMessageString);
 
 
 	private readonly Options _options;
 	private readonly IProxyServerRouter _router;
-	private Statistic _stats;
 
 
 	public ProxyServer(IOptions<Options> options, IProxyServerRouter router)
@@ -27,165 +28,174 @@ public class ProxyServer
 	}
 
 
-	public void Run(CancellationToken token = default)
+	public void Run(IEnumerable<ProxyInbound> inbounds, CancellationToken token = default)
 	{
-		var listener = new TcpListener(_options.ListenEndPoint);
-		listener.Start();
+		ActiveInbound[] activeInbounds = inbounds.Select(ActiveInbound.Create).ToArray();
 
 		AsyncContext.Run(async () =>
 		{
 			var onlineClients = new HashSet<Task>();
+			foreach (var inbound in activeInbounds)
+			{
+				inbound.StartListen();
+				inbound.AcceptNewClient();
+			}
 
 			try
 			{
 				while (token.IsCancellationRequested == false)
 				{
-					TcpClient client;
 					try
-					{ client = await listener.AcceptTcpClientAsync(token); }
-					catch (TaskCanceledException) { break; }
+					{
+						var finishedTask = (await Task.WhenAny(activeInbounds.Select(s => s.AcceptTask)));
+						var targetInbound = Array.Find(activeInbounds, s => s.AcceptTask == finishedTask);
+						targetInbound!.AcceptNewClient();
 
-					_stats.NewClient();
+						var clientSocket = finishedTask.Result;
 
-					Console.WriteLine($"NEW CLIENT: IPEP={client.Client.RemoteEndPoint}, STATS=({_stats})");
-
-					onlineClients.Add(HandleClientAsync(client));
+						onlineClients.Add(HandleClientAsync(targetInbound!, clientSocket));
+					}
+					catch (TaskCanceledException) { }
 				}
 			}
 			finally
 			{
 				await Task.WhenAll(onlineClients);
 			}
-
 		});
 	}
 
 
-	private async Task HandleClientAsync(TcpClient client)
+	private async Task HandleClientAsync(ActiveInbound inbound, Socket client)
 	{
 		await Task.Yield();
 
-		using var context = new ProxyContext(client, this);
-		context.Stream.ReadTimeout = (int)_options.ReadTimeout.TotalMilliseconds;
+		using var clientContext = new ProxyClientContext(client, this);
+		clientContext.Stream.WriteTimeout = clientContext.Stream.ReadTimeout = (int)_options.MasterClientTimeout.TotalMilliseconds;
 
-		bool shouldKeepConnection = false;
+		Console.WriteLine($"New client from {inbound.InboundInfo.Name}: {clientContext}");
 
 		try
 		{
+			bool shouldKeepConnection;
+			int ordinalRequestNumber = 0;
 			do
 			{
+				ordinalRequestNumber++;
 				shouldKeepConnection = false;
-				_stats.NewRequest();
 
-				try
-				{
-					var rawHeader = HttpMessageHeader.ReadRawHeader(context.Stream);
+				while (clientContext.Stream.DataAvailable == false)
+					await Task.Delay(250);
 
-					if (rawHeader.Length == 0)
-						return;
-					var header = HttpRequestHeader.Parse(rawHeader);
+				var rawHeader = HttpMessageHeader.ReadRawHeader(clientContext.Stream);
+				if (rawHeader.Length == 0) return;
+				var header = HttpRequestHeader.Parse(rawHeader);
 
-					HttpEndPoint endpoint = header.Uri.EndPoint;
-					var connection = header.Headers.TryGetSingle(ProxyConnectionHeader);
+				HttpEndPoint endpoint = header.Uri.EndPoint;
 
-					if (header.Method == "CONNECT")
-					{
-						var result = await _router.RouteConnectAsync(context, endpoint);
-						Console.WriteLine($"CONNECT {endpoint} -> {result.GetType().Name}");
-						if (result is DirectProxyRoutingResult)
-							await HandleConnectDirect(context, endpoint);
-						else if (result is UpstreamProxyRoutingResult upstream)
-							await HandleConnectViaProxy(context, endpoint, upstream.UpstreamProxyServer);
-					}
-					else
-					{
-						var result = await _router.RouteHttpAsync(context, endpoint, header);
-						Console.WriteLine($"HTTP {endpoint} -> {result.GetType().Name}");
-						if (result is DirectProxyRoutingResult)
-							await HandleHttpDirect(context, endpoint, header);
-						else if (result is UpstreamProxyRoutingResult upstream)
-							await HandleHttpViaProxy(context, endpoint, upstream.UpstreamProxyServer, header);
-					}
+				var requestType = header.Method == "CONNECT" ? HttpProxyRequestType.Connect : HttpProxyRequestType.HTTP;
 
-					if (connection == "keep-alive" && context.Client.Connected)
-					{
-						shouldKeepConnection = true;
-					}
-				}
-				finally
-				{
-					_stats.FinishRequest();
-				}
+				var connection = header.Headers.TryGetSingle(ProxyConnectionHeader);
+
+				var requestContext = new ProxyRequestContext(clientContext, header, endpoint, requestType, ordinalRequestNumber);
+
+				Console.WriteLine($"New request: {requestContext}");
+
+				var result = await _router.RouteRequestAsync(requestContext);
+
+				Console.WriteLine($"{requestContext} === Routed to [{string.Join(", ", result.ClientConfigurations.Select(s => s.Name))}]");
+
+				await HandleRequestAsync(requestContext, result);
+
+				if (connection == "keep-alive" && clientContext.Socket.Connected)
+					shouldKeepConnection = true;
 			}
 			while (shouldKeepConnection);
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Client handling error: {ex}");
+			Console.WriteLine($"{client} === ERROR {ex}");
 		}
-		finally
+	}
+
+	private static async Task HandleRequestAsync(ProxyRequestContext context, ProxyRoutingResult routingDecision)
+	{
+		NetClientConfiguration? usedConfiguration = null;
+		using var client = new TcpClient();
+		foreach (var configuration in routingDecision.ClientConfigurations)
 		{
-			_stats.FinishClient();
+			try
+			{
+				ConfigureClient(client, configuration);
+
+				switch ((context.RequestType, configuration.ProxyServer))
+				{
+					case (HttpProxyRequestType.Connect, not null):
+						await ConnectClientAsync(client, configuration, configuration.ProxyServer);
+						await DialConnectWithProxyServerAsync(client, context.EndPoint);
+						await context.Stream.WriteAsync(ConnectionEstablishedMessage);
+						break;
+
+					case (HttpProxyRequestType.Connect, null):
+						await ConnectClientAsync(client, configuration, context.EndPoint);
+						await context.Stream.WriteAsync(ConnectionEstablishedMessage);
+						break;
+
+					case (HttpProxyRequestType.HTTP, not null):
+						await ConnectClientAsync(client, configuration, configuration.ProxyServer);
+						await SendHeaderToRemote(client, context.Header);
+						break;
+
+					case (HttpProxyRequestType.HTTP, null):
+						await ConnectClientAsync(client, configuration, context.Header.Uri.EndPoint);
+						context.Header.Headers.RemoveAll(ProxyConnectionHeader);
+						context.Header.Headers.RemoveAll(ConnectionHeader);
+						context.Header.Headers.Add(ConnectionHeader, "close");
+						await SendHeaderToRemote(client, context.Header);
+						break;
+				}
+
+				usedConfiguration = configuration;
+				break;
+			}
+			catch (SocketException)
+			{
+				continue;
+			}
+			catch (ProxyDialException)
+			{
+				continue;
+			}
 		}
+
+		if (usedConfiguration is null)
+			throw new Exception($"Enable to connect to {context.EndPoint} or/and one of the upstream proxies");
+
+		Console.WriteLine($"{context} === Connected using configuration: {usedConfiguration.Name}");
+
+		await RelayTwoWay(context.Stream, client.GetStream());
 	}
 
-	static async Task HandleConnectDirect(ProxyContext context, HttpEndPoint endPoint)
+
+	private static async Task DialConnectWithProxyServerAsync(TcpClient connectedClient, HttpEndPoint endPoint)
 	{
-		using var server = new TcpClient();
-		await server.ConnectAsync(endPoint);
-		using var serverStream = server.GetStream();
-
-		await context.Stream.WriteAsync(ConnectionEstablishedMessage);
-
-		await RelayTwoWay(context.Stream, serverStream);
-	}
-
-	static async Task HandleConnectViaProxy(ProxyContext context, HttpEndPoint endPoint, IPEndPoint upstreamProxy)
-	{
-		using var proxy = new TcpClient();
-		await proxy.ConnectAsync(upstreamProxy);
-		using var proxyStream = proxy.GetStream();
+		var proxyStream = connectedClient.GetStream();
 
 		var connectRequest = new HttpRequestHeader("CONNECT", new HttpUri(null, endPoint, null, null), HttpMessageHeader.HTTP11, [("Host", endPoint.ToString())]).Serialize();
 		await proxyStream.WriteAsync(Encoding.UTF8.GetBytes(connectRequest));
 
 		var connectResponse = HttpResponseHeader.Parse(HttpMessageHeader.ReadRawHeader(proxyStream));
 		if (connectResponse.Code != 200)
-		{
-			await context.Stream.WriteAsync(Encoding.UTF8.GetBytes(connectResponse.Serialize()));
-			return;
-		}
-
-		await context.Stream.WriteAsync(ConnectionEstablishedMessage);
-
-		await RelayTwoWay(context.Stream, proxyStream);
+			throw new ProxyDialException($"Proxy server return {connectResponse.Code} status code with reason: {connectResponse.Reason}", proxyStream.Socket.RemoteEndPoint);
 	}
 
-	static async Task HandleHttpDirect(ProxyContext context, HttpEndPoint endPoint, HttpRequestHeader header)
+	private static async ValueTask SendHeaderToRemote(TcpClient client, HttpMessageHeader messageHeader)
 	{
-		using var server = new TcpClient();
-		await server.ConnectAsync(endPoint);
-		using var serverStream = server.GetStream();
-
-		header.Headers.RemoveAll(ProxyConnectionHeader);
-		var requestHeader = new HttpRequestHeader(header.Method, header.Uri, header.Version, header.Headers).Serialize();
-		await serverStream.WriteAsync(Encoding.UTF8.GetBytes(requestHeader));
-
-		await RelayTwoWay(serverStream, context.Stream);
+		var message = messageHeader.Serialize();
+		await client.GetStream().WriteAsync(Encoding.UTF8.GetBytes(message));
 	}
 
-	static async Task HandleHttpViaProxy(ProxyContext context, HttpEndPoint endPoint, IPEndPoint upstreamProxy, HttpRequestHeader header)
-	{
-		using var proxy = new TcpClient();
-		await proxy.ConnectAsync(endPoint);
-		using var proxyStream = proxy.GetStream();
-
-		await proxyStream.WriteAsync(Encoding.UTF8.GetBytes(header.Serialize()));
-
-		await RelayTwoWay(context.Stream, proxyStream);
-	}
-
-	static async Task RelayTwoWay(Stream a, Stream b)
+	private static async Task RelayTwoWay(Stream a, Stream b)
 	{
 		using var cts = new CancellationTokenSource();
 
@@ -206,46 +216,71 @@ public class ProxyServer
 		await Task.WhenAll(t1, t2);
 	}
 
+	private static void ConfigureClient(TcpClient client, NetClientConfiguration configuration)
+	{
+		client.SendTimeout = client.ReceiveTimeout = (int)configuration.Timeout.TotalMilliseconds;
+	}
+
+	private static ValueTask<TcpClient> ConnectClientAsync(TcpClient client, NetClientConfiguration configuration, HttpEndPoint endPoint) =>
+		ConnectClientAsync(client, configuration, (client) => client.ConnectAsync(endPoint));
+
+	private static ValueTask<TcpClient> ConnectClientAsync(TcpClient client, NetClientConfiguration configuration, IPEndPoint endPoint) =>
+		ConnectClientAsync(client, configuration, (client) => client.ConnectAsync(endPoint));
+
+	private static async ValueTask<TcpClient> ConnectClientAsync(TcpClient client, NetClientConfiguration configuration, Func<TcpClient, Task> connectDelegate)
+	{
+		int retries = configuration.MaxRequestCount;
+		while (retries > 0)
+		{
+			try
+			{
+				await connectDelegate(client);
+				break;
+			}
+			catch (SocketException)
+			{
+				retries--;
+			}
+		}
+
+		return client;
+	}
+
 
 	public class Options
 	{
-		public required IPEndPoint ListenEndPoint { get; init; }
-
-		public TimeSpan ReadTimeout { get; init; } = TimeSpan.FromSeconds(10);
+		public TimeSpan MasterClientTimeout { get; init; } = TimeSpan.FromSeconds(10);
 	}
 
-	public struct Statistic
+	private class ProxyDialException(string message, EndPoint? proxyServer) : Exception($"{message}. Proxy: {proxyServer}") { }
+
+	private class ActiveInbound(ProxyInbound inboundInfo, Socket socket)
 	{
-		public int TotalRequests;
-		public int TotalClients;
-		public int ActiveRequests;
-		public int ActiveClients;
+		private Task<Socket>? _acceptTask;
 
-		public override string ToString()
+
+		public ProxyInbound InboundInfo { get; } = inboundInfo;
+
+		public Socket Socket { get; } = socket;
+
+		public Task<Socket> AcceptTask => _acceptTask ?? throw new NullReferenceException();
+
+
+		public void StartListen()
 		{
-			return $"tr|tc: {TotalRequests}|{TotalClients}, ar|ac: {ActiveRequests}|{ActiveClients}";
+			Socket.Listen();
 		}
 
-		public void NewClient()
+		public void AcceptNewClient()
 		{
-			Interlocked.Increment(ref TotalClients);
-			Interlocked.Increment(ref ActiveClients);
+			_acceptTask = Socket.AcceptAsync();
 		}
 
-		public void NewRequest()
+		public static ActiveInbound Create(ProxyInbound inbound)
 		{
-			Interlocked.Increment(ref TotalRequests);
-			Interlocked.Increment(ref ActiveRequests);
-		}
-
-		public void FinishClient()
-		{
-			Interlocked.Decrement(ref ActiveClients);
-		}
-
-		public void FinishRequest()
-		{
-			Interlocked.Decrement(ref ActiveRequests);
+			var socket = new Socket(inbound.EndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+			socket.Bind(inbound.EndPoint);
+			return new ActiveInbound(inbound, socket);
 		}
 	}
 }

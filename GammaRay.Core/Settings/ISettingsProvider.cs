@@ -1,5 +1,5 @@
-﻿using GammaRay.Core.Routing;
-using GammaRay.Core.Settings.Entities;
+﻿using GammaRay.Core.Proxy;
+using GammaRay.Core.Routing;
 
 namespace GammaRay.Core.Settings;
 
@@ -8,7 +8,7 @@ public interface ISettingsProvider : IConfigurationsProvider, IDomainCategorizer
 	public void LoadSettings();
 
 
-	public IReadOnlyDictionary<string, InboundSettings> Inbounds { get; }
+	public IReadOnlyCollection<ProxyInbound> Inbounds { get; }
 
 	public IReadOnlyCollection<NetworkProfile> RegisteredProfiles { get; }
 }

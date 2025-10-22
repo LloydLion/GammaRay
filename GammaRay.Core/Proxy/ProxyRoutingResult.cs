@@ -1,9 +1,6 @@
-﻿using System.Net;
+﻿namespace GammaRay.Core.Proxy;
 
-namespace GammaRay.Core.Proxy;
-
-public abstract record ProxyRoutingResult();
-
-public sealed record DirectProxyRoutingResult() : ProxyRoutingResult;
-
-public sealed record UpstreamProxyRoutingResult(IPEndPoint UpstreamProxyServer) : ProxyRoutingResult;
+public class ProxyRoutingResult(IEnumerable<NetClientConfiguration> clientConfigurations)
+{
+	public IEnumerable<NetClientConfiguration> ClientConfigurations { get; } = clientConfigurations;
+}

@@ -1,7 +1,9 @@
-﻿using GammaRay.Core.Routing;
+﻿using GammaRay.Core.Proxy;
+using GammaRay.Core.Routing;
 using GammaRay.Core.Settings.Entities;
 using Microsoft.Extensions.Options;
 using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 
 namespace GammaRay.Core.Settings;
@@ -14,7 +16,7 @@ public sealed class SettingsProvider(IOptions<SettingsProvider.Options> options)
 
 	private LoadedSettings Settings => _settings ?? throw new InvalidOperationException("Load settings before use any other method");
 
-	public IReadOnlyDictionary<string, InboundSettings> Inbounds => Settings.RawObject.Inbounds;
+	public IReadOnlyCollection<ProxyInbound> Inbounds => Settings.Inbounds;
 
 	public IReadOnlyCollection<NetworkProfile> RegisteredProfiles => Settings.Profiles;
 
@@ -63,7 +65,7 @@ public sealed class SettingsProvider(IOptions<SettingsProvider.Options> options)
 			ApplicationSettings rawSettings;
 			using (var file = File.OpenRead(_options.SettingsFilePath))
 			{
-				rawSettings = JsonSerializer.Deserialize<ApplicationSettings>(file) ?? throw new FormatException("Empty");
+				rawSettings = JsonSerializer.Deserialize(file, SettingsJsonContext.Default.ApplicationSettings) ?? throw new FormatException("Empty");
 			}
 
 			var profiles = rawSettings.NetworkProfiles.Select(s => new NetworkProfile(s.Key)).ToDictionary(s => s.Name);
@@ -71,6 +73,7 @@ public sealed class SettingsProvider(IOptions<SettingsProvider.Options> options)
 			var configurations = LoadConfigurations(rawSettings).ToDictionary(s => s.Name);
 			var queues = rawSettings.PriorityQueues.Select(s => new ClientConfigurationQueue(s.Key, s.Value.Select(c => configurations[c]).ToArray())).ToDictionary(s => s.Name);
 			var routeGrid = LoadRouteGrid(rawSettings);
+			var inbounds = LoadInbounds(rawSettings);
 
 
 			_settings = new LoadedSettings(
@@ -80,12 +83,38 @@ public sealed class SettingsProvider(IOptions<SettingsProvider.Options> options)
 				domainTable,
 				configurations,
 				queues,
-				routeGrid
+				routeGrid,
+				inbounds
 			);
 		}
 		catch (Exception ex)
 		{
 			throw new SettingsLoadException(ex, $"File={_options.SettingsFilePath}");
+		}
+	}
+
+	private static ProxyInbound[] LoadInbounds(ApplicationSettings rawSettings)
+	{
+		return rawSettings.Inbounds.Select(s =>
+		{
+			return new ProxyInbound(s.Key)
+			{
+				EndPoint = parseEndPoint(s.Value.EndPoint),
+				Protocol = Enum.Parse<ProxyInbound.ProxyProtocol>(s.Value.Protocol, ignoreCase: true)
+			};
+		}).ToArray();
+
+
+
+		EndPoint parseEndPoint(string value)
+		{
+			if (IPEndPoint.TryParse(value, out var ipEndPoint))
+				return ipEndPoint;
+
+			if (value.All(s => !Path.GetInvalidPathChars().Contains(s)))
+				return new UnixDomainSocketEndPoint(value);
+
+			throw new FormatException($"Invalid endpoint: {value}");
 		}
 	}
 
@@ -164,7 +193,8 @@ public sealed class SettingsProvider(IOptions<SettingsProvider.Options> options)
 		List<(DomainPattern[] Patterns, DomainCategory Category)> DomainTable,
 		Dictionary<string, NetClientConfiguration> Configurations,
 		Dictionary<string, ClientConfigurationQueue> Queues,
-		Dictionary<(string Category, string Profile), string> RouteGrid
+		Dictionary<(string Category, string Profile), string> RouteGrid,
+		ProxyInbound[] Inbounds
 	);
 
 	private class DomainPattern(string rawPattern)

@@ -5,6 +5,13 @@
 		{
 			"protocol": "http",
 			"endpoint": "127.0.0.1:9999"
+		},
+
+		
+		"host2":
+		{
+			"protocol": "http",
+			"endpoint": "127.0.0.2:9999"
 		}
 	},
 
@@ -12,12 +19,19 @@
 	{
 		"direct":
 		{
-
+			"timeoutMs": 10000,
+			"requestInternalMs": 3000,
+			"requestCount": 3,
+			"maxRequestCount": 5
 		},
 
 		"proxy":
 		{
-			"proxyServer": "127.0.0.1:1083"
+			"proxyServer": "127.0.0.1:1083",
+			"timeoutMs": 10000,
+			"requestInternalMs": 3000,
+			"requestCount": 3,
+			"maxRequestCount": 5
 		}
 	},
 

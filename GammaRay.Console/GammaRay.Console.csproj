@@ -8,8 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!--ProjectReference Include="..\GammaRay.Core.Windows\GammaRay.Core.Windows.csproj" /-->
-    <ProjectReference Include="..\GammaRay.Core.Linux\GammaRay.Core.Linux.csproj" />
+    <ProjectReference Include="..\GammaRay.Core.Windows\GammaRay.Core.Windows.csproj" />
     <ProjectReference Include="..\GammaRay.Core\GammaRay.Core.csproj" />
   </ItemGroup>
 
@@ -21,5 +20,11 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <Target Name="AddWindowsRuntimeDefine" BeforeTargets="CoreCompile">
+    <PropertyGroup Condition="'$(PublishForWindows)' == 'true'">
+      <DefineConstants>$(DefineConstants);WindowsRuntime</DefineConstants>
+    </PropertyGroup>
+  </Target>
 
 </Project>

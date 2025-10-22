@@ -17,16 +17,10 @@ public class SmartRouter(
 {
 	private readonly HashSet<(string Profile, Site Site)> _probingNow = [];
 
+	public Task<ProxyRoutingResult> RouteRequestAsync(ProxyRequestContext requestContext) =>
+		Task.FromResult(RouteRequest(requestContext.EndPoint));
 
-	public Task<ProxyRoutingResult> RouteHttpAsync(ProxyContext context, HttpEndPoint targetHost, HttpRequestHeader header) =>
-		RouteConnectAsync(context, targetHost);
-
-	public Task<ProxyRoutingResult> RouteConnectAsync(ProxyContext context, HttpEndPoint targetHost)
-	{
-		return Task.FromResult(RouteConnect(targetHost));
-	}
-
-	private ProxyRoutingResult RouteConnect(HttpEndPoint targetHost)
+	private ProxyRoutingResult RouteRequest(HttpEndPoint targetHost)
 	{
 		var currentNetwork = _networkIdentifier.CurrentIdentity;
 		var profile = _profiles.GetProfileForNetwork(currentNetwork);
@@ -48,10 +42,7 @@ public class SmartRouter(
 		}
 		else config = _configurations.GetConfiguration(route);
 
-		if (config.ProxyServer is null)
-			return new DirectProxyRoutingResult();
-		else
-			return new UpstreamProxyRoutingResult(config.ProxyServer);
+		return new ProxyRoutingResult([config]);
 	}
 
 	private async void StartBackgroundProbing(Site site, NetworkProfile profile, ClientConfigurationQueue queue)

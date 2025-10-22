@@ -1,10 +1,9 @@
 ﻿using GammaRay.Core.Network;
-using System.Runtime.InteropServices;
 
 
 namespace GammaRay.Core.Linux.Network;
 
-public class LinuxNetProfileBasedNetworkIdentifier() : NetworkIdentifierBase(OSPlatform.Linux)
+public class InterfaceBasedNetworkIdentifier() : NetworkIdentifierBase(default)
 {
 	protected override NetworkIdentity FetchCurrentNetworkIdentity()
 	{
@@ -14,6 +13,6 @@ public class LinuxNetProfileBasedNetworkIdentifier() : NetworkIdentifierBase(OSP
 		var mac = internetInterface.GetPhysicalAddress().ToString();
 		var ip = internetInterface.GetIPProperties().UnicastAddresses
 			.FirstOrDefault(a => a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?.Address.ToString();
-		return new NetworkIdentity([internetInterface.Name, mac, ip]);
+		return new NetworkIdentity([internetInterface.Name, mac, ip ?? "NoIP"]);
 	}
 }
