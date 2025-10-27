@@ -1,5 +1,6 @@
 ﻿using GammaRay.Core.Routing;
 using Microsoft.Extensions.Options;
+using Serilog;
 
 namespace GammaRay.Core.Persistence;
 
@@ -7,6 +8,9 @@ public class RoutePersistenceStorage(
 	IOptions<RoutePersistenceStorage.Options> options
 ) : IRoutePersistenceStorage
 {
+	private readonly ILogger _logger = Log.ForContext<RoutePersistenceStorage>();
+
+
 	private readonly Options _options = options.Value;
 	private readonly SemaphoreSlim _semaphore = new(1);
 	private Dictionary<(string Site, string Profile), string>? _data;
@@ -53,9 +57,7 @@ public class RoutePersistenceStorage(
 		}
 		catch (Exception ex)
 		{
-			Console.ForegroundColor = ConsoleColor.Blue;
-			Console.WriteLine("FAILED TO SAVE DATABASE: " + ex.ToString());
-			Console.ResetColor();
+			_logger.Error(ex, "Failed to save database");
 		}
 		finally
 		{

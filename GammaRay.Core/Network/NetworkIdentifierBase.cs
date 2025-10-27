@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using Serilog;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -9,17 +10,20 @@ namespace GammaRay.Core.Network;
 public abstract class NetworkIdentifierBase : INetworkIdentifier
 {
 	private const int RefreshEventTimeout = 3000;
+	private readonly static IPAddress InternetAddress = IPAddress.Parse("1.1.1.1");
 
 
 	private readonly Timer _timer;
+	private readonly ILogger _logger;
 	private DateTime? _lastRefresh;
 	private NetworkIdentity? _identity;
 	private int _isRefreshing = 0;
 
 
-	protected NetworkIdentifierBase(OSPlatform targetPlatform)
+	protected NetworkIdentifierBase(OSPlatform targetPlatform, ILogger logger)
 	{
 		TargetPlatform = targetPlatform;
+		_logger = logger;
 		_timer = new(RefreshEvent);
 	}
 
@@ -33,17 +37,14 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 
 	protected abstract NetworkIdentity FetchCurrentNetworkIdentity();
 
-	protected IPAddress TraceRouteToInternet()
+	protected static IPAddress TraceRouteToInternet()
 	{
-		var address = IPAddress.Parse("1.1.1.1");
-		using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
-		{
-			socket.Connect(address, 53);
-			return ((IPEndPoint)socket.LocalEndPoint!).Address;
-		}
+		using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+		socket.Connect(InternetAddress, 53);
+		return ((IPEndPoint)socket.LocalEndPoint!).Address;
 	}
 
-	protected NetworkInterface GetInterfaceByIP(IPAddress ipAddress)
+	protected static NetworkInterface GetInterfaceByIP(IPAddress ipAddress)
 	{
 		foreach (var networkInterface in NetworkInterface.GetAllNetworkInterfaces())
 			foreach (var interfaceAddress in networkInterface.GetIPProperties().UnicastAddresses)
@@ -61,9 +62,8 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 		_identity = FetchCurrentNetworkIdentity();
 		_lastRefresh = DateTime.UtcNow;
 
-		Console.ForegroundColor = ConsoleColor.Red;
-		Console.WriteLine("NEW NETWORK " + _identity.Value.SerializeToString());
-		Console.ResetColor();
+
+		_logger.Information("Current network is {NetworkIdentity}", _identity.Value.SerializeToString());
 
 		NetworkChange.NetworkAddressChanged += NetworkChanged;
 	}
@@ -86,13 +86,11 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 			_identity = FetchCurrentNetworkIdentity();
 			_lastRefresh = DateTime.UtcNow;
 
-			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine("NEW NETWORK " + _identity.Value.SerializeToString());
-			Console.ResetColor();
+			_logger.Information("Current network changed to {NetworkIdentity}", _identity.Value.SerializeToString());
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"FAILED TO IDENTITIFY NEW NETWORK: {ex}");
+			_logger.Error(ex, "Current network changed, but identification has failed, using old values");
 		}
 		finally
 		{

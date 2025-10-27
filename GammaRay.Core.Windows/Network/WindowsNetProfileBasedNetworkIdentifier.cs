@@ -1,4 +1,5 @@
 ﻿using GammaRay.Core.Network;
+using Serilog;
 using System.Management;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
@@ -8,8 +9,11 @@ namespace GammaRay.Core.Windows.Network;
 
 
 [SupportedOSPlatform("windows")]
-public class WindowsNetProfileBasedNetworkIdentifier() : NetworkIdentifierBase(OSPlatform.Windows)
+public class WindowsNetProfileBasedNetworkIdentifier() : NetworkIdentifierBase(OSPlatform.Windows, _logger)
 {
+	private static readonly ILogger _logger = Log.ForContext<WindowsNetProfileBasedNetworkIdentifier>();
+
+
 	protected override NetworkIdentity FetchCurrentNetworkIdentity()
 	{
 		var internetInterfaceIP = TraceRouteToInternet();

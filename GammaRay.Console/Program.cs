@@ -4,8 +4,21 @@ using GammaRay.Core.Probing;
 using GammaRay.Core.Proxy;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Settings;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using Serilog;
+using Serilog.Settings.Configuration;
 
+
+var appConfiguration = new ConfigurationBuilder()
+	.AddJsonFile("application.json", optional: false)
+	.Build();
+
+if (appConfiguration.GetValue("Logging:EnableSelfLog", defaultValue: false))
+	Serilog.Debugging.SelfLog.Enable(Console.Error);
+Log.Logger = new LoggerConfiguration()
+	.ReadFrom.Configuration(appConfiguration, new ConfigurationReaderOptions() { SectionName = "Logging" })
+	.CreateLogger();
 
 var settingsProvider = new SettingsProvider(Options.Create(new SettingsProvider.Options() { SettingsFilePath = "settings.json" }));
 settingsProvider.LoadSettings();

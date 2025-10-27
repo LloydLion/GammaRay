@@ -1,4 +1,6 @@
-﻿using System.Net.Sockets;
+﻿using Serilog;
+using System.Net;
+using System.Net.Sockets;
 
 namespace GammaRay.Core.Proxy;
 
@@ -7,13 +9,15 @@ public class ProxyClientContext : IDisposable
 	private static readonly Random _globalRandom = new();
 
 
-	public ProxyClientContext(Socket socket, ProxyServer server)
+	public ProxyClientContext(Socket socket, ProxyServer server, ILogger baseLogger)
 	{
 		Socket = socket;
 		Server = server;
 		Stream = new NetworkStream(socket);
 
 		ClientId = _globalRandom.Next();
+
+		Logger = baseLogger.ForContext(nameof(ClientId), ClientId, destructureObjects: false);
 	}
 
 
@@ -25,6 +29,8 @@ public class ProxyClientContext : IDisposable
 
 	public int ClientId { get; }
 
+	public ILogger Logger { get; }
+
 
 	public void Dispose()
 	{
@@ -35,6 +41,11 @@ public class ProxyClientContext : IDisposable
 
 	public override string ToString()
 	{
-		return $"Client({Stream.Socket.RemoteEndPoint}):{Convert.ToHexString(BitConverter.GetBytes(ClientId))}";
+		string? remoteEndPointString;
+		var remoteEndPoint = Stream.Socket.RemoteEndPoint;
+		if (remoteEndPoint is IPEndPoint ipEndPoint && ipEndPoint.Address == IPAddress.Loopback)
+			remoteEndPointString = "loop:" + ipEndPoint.Port;
+		else remoteEndPointString = remoteEndPoint?.ToString();
+		return $"Client({remoteEndPointString}):{Convert.ToHexString(BitConverter.GetBytes(ClientId))}";
 	}
 }

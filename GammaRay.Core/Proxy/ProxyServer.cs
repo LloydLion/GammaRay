@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Options;
 using Nito.AsyncEx;
+using Serilog;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -10,12 +11,13 @@ public class ProxyServer
 {
 	private const string ProxyConnectionHeader = "Proxy-Connection";
 	private const string ConnectionHeader = "Connection";
-
 	private static readonly string ConnectionEstablishedMessageString =
 		new HttpResponseHeader(200, "Connection established", HttpMessageHeader.HTTP11, []).Serialize();
 	private static readonly byte[] ConnectionEstablishedMessage =
 		Encoding.UTF8.GetBytes(ConnectionEstablishedMessageString);
 
+
+	private static readonly ILogger _logger = Log.ForContext<ProxyServer>();
 
 	private readonly Options _options;
 	private readonly IProxyServerRouter _router;
@@ -32,6 +34,8 @@ public class ProxyServer
 	{
 		ActiveInbound[] activeInbounds = inbounds.Select(ActiveInbound.Create).ToArray();
 
+		_logger.Information("Proxy server started, using inbounds: {Inbounds}", activeInbounds.Select(s => $"{s.InboundInfo.Name}|{s.InboundInfo.EndPoint}"));
+
 		AsyncContext.Run(async () =>
 		{
 			var onlineClients = new HashSet<Task>();
@@ -47,7 +51,7 @@ public class ProxyServer
 				{
 					try
 					{
-						var finishedTask = (await Task.WhenAny(activeInbounds.Select(s => s.AcceptTask)));
+						var finishedTask = await Task.WhenAny(activeInbounds.Select(s => s.AcceptTask));
 						var targetInbound = Array.Find(activeInbounds, s => s.AcceptTask == finishedTask);
 						targetInbound!.AcceptNewClient();
 
@@ -70,10 +74,11 @@ public class ProxyServer
 	{
 		await Task.Yield();
 
-		using var clientContext = new ProxyClientContext(client, this);
+		using var clientContext = new ProxyClientContext(client, this, _logger);
 		clientContext.Stream.WriteTimeout = clientContext.Stream.ReadTimeout = (int)_options.MasterClientTimeout.TotalMilliseconds;
+		clientContext.Logger.Information("New client connected from {Inbound}, RemoteEndPoint: {EndPoint}", inbound.InboundInfo.Name, clientContext.Socket.RemoteEndPoint);
 
-		Console.WriteLine($"New client from {inbound.InboundInfo.Name}: {clientContext}");
+		ProxyRequestContext? requestContext = null;
 
 		try
 		{
@@ -84,37 +89,53 @@ public class ProxyServer
 				ordinalRequestNumber++;
 				shouldKeepConnection = false;
 
-				while (clientContext.Stream.DataAvailable == false)
+				int waitCycles = (int)(_options.MasterClientTimeout.TotalMilliseconds / 250);
+				while (clientContext.Stream.DataAvailable == false && waitCycles-- != 0)
 					await Task.Delay(250);
+				if (waitCycles == -1)
+				{
+					clientContext.Logger.Information("Closing connection due client inactivity");
+					return;
+				}
+
+				clientContext.Logger.Debug("New data available. Trying to read socket");
 
 				var rawHeader = HttpMessageHeader.ReadRawHeader(clientContext.Stream);
 				if (rawHeader.Length == 0) return;
 				var header = HttpRequestHeader.Parse(rawHeader);
 
 				HttpEndPoint endpoint = header.Uri.EndPoint;
-
 				var requestType = header.Method == "CONNECT" ? HttpProxyRequestType.Connect : HttpProxyRequestType.HTTP;
-
 				var connection = header.Headers.TryGetSingle(ProxyConnectionHeader);
 
-				var requestContext = new ProxyRequestContext(clientContext, header, endpoint, requestType, ordinalRequestNumber);
-
-				Console.WriteLine($"New request: {requestContext}");
+				requestContext = new ProxyRequestContext(clientContext, header, endpoint, requestType, ordinalRequestNumber);
+				requestContext.Logger.Information("New request: {RequestType} to {EndPointHost}:{EndPointPort}. Request header: {@RequestHeader}",
+					requestContext.RequestType, requestContext.EndPoint.Host, requestContext.EndPoint.Port, requestContext.Header);
 
 				var result = await _router.RouteRequestAsync(requestContext);
-
-				Console.WriteLine($"{requestContext} === Routed to [{string.Join(", ", result.ClientConfigurations.Select(s => s.Name))}]");
+				requestContext.Logger.Information("Routed to {ClientConfigurations}", result.ClientConfigurations.Select(s => s.Name));
 
 				await HandleRequestAsync(requestContext, result);
+				requestContext.Logger.Information("Request finished");
 
-				if (connection == "keep-alive" && clientContext.Socket.Connected)
+				if (string.Equals(connection, "keep-alive", StringComparison.OrdinalIgnoreCase))
+				{
+					clientContext.Logger.Information("Client requested to keep connection alive");
 					shouldKeepConnection = true;
+				}
 			}
 			while (shouldKeepConnection);
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"{client} === ERROR {ex}");
+			if (requestContext is not null)
+				requestContext.Logger.Error(ex, "Error while handling request");
+			else
+				clientContext.Logger.Error(ex, "Error while handling client");
+		}
+		finally
+		{
+			clientContext.Logger.Information("Client done, connection closed");
 		}
 	}
 
@@ -162,8 +183,9 @@ public class ProxyServer
 			{
 				continue;
 			}
-			catch (ProxyDialException)
+			catch (ProxyDialException ex)
 			{
+				context.Logger.Warning(ex, "Failed dial with upstream proxy server (from '{ConfigurationName}')", configuration.Name);
 				continue;
 			}
 		}
@@ -171,7 +193,7 @@ public class ProxyServer
 		if (usedConfiguration is null)
 			throw new Exception($"Enable to connect to {context.EndPoint} or/and one of the upstream proxies");
 
-		Console.WriteLine($"{context} === Connected using configuration: {usedConfiguration.Name}");
+		context.Logger.Information("Connected using configuration: '{ConfigurationName}'", usedConfiguration.Name);
 
 		await RelayTwoWay(context.Stream, client.GetStream());
 	}
@@ -240,6 +262,7 @@ public class ProxyServer
 			catch (SocketException)
 			{
 				retries--;
+				await Task.Delay(configuration.RequestInternal);
 			}
 		}
 

@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using Serilog;
+using System.Net.Sockets;
 
 namespace GammaRay.Core.Proxy;
 
@@ -17,6 +18,8 @@ public class ProxyRequestContext
 		EndPoint = endPoint;
 		RequestType = requestType;
 		RequestOrdinalNumber = ordinalNumber;
+
+		Logger = clientContext.Logger.ForContext("RequestOrd", RequestOrdinalNumber);
 	}
 
 
@@ -37,6 +40,8 @@ public class ProxyRequestContext
 	public HttpProxyRequestType RequestType { get; }
 
 	public int RequestOrdinalNumber { get; }
+
+	public ILogger Logger { get; }
 
 
 	public override string ToString()
