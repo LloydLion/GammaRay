@@ -57,7 +57,35 @@ public class ProxyServer
 
 						var clientSocket = finishedTask.Result;
 
-						onlineClients.Add(HandleClientAsync(targetInbound!, clientSocket));
+						runHandleClient(targetInbound!, clientSocket);
+
+
+						async void runHandleClient(ActiveInbound inbound, Socket client)
+						{
+							var memoryBefore = GC.GetTotalMemory(forceFullCollection: false) / 1024 / 1024f;
+
+							var task = HandleClientAsync(inbound, client);
+							onlineClients.Add(task);
+							await task;
+							onlineClients.Remove(task);
+
+							GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+							var memoryAfterClient = GC.GetTotalMemory(forceFullCollection: false) / 1024 / 1024f;
+							var memoryAfterCollection = GC.GetTotalMemory(forceFullCollection: false) / 1024 / 1024f;
+
+
+							_logger.Information("Memory stats: {@Stats}",
+								new
+								{
+									MemBefore = memoryBefore,
+									After = memoryAfterClient,
+									AfterCollection = memoryAfterCollection,
+									Allocated = memoryAfterClient - memoryBefore,
+									Collected = memoryAfterCollection - memoryAfterClient,
+									TotalNet = memoryAfterCollection - memoryBefore
+								}
+							);
+						}
 					}
 					catch (TaskCanceledException) { }
 				}
@@ -272,7 +300,7 @@ public class ProxyServer
 
 	public class Options
 	{
-		public TimeSpan MasterClientTimeout { get; init; } = TimeSpan.FromSeconds(10);
+		public TimeSpan MasterClientTimeout { get; init; } = TimeSpan.FromSeconds(2);
 	}
 
 	private class ProxyDialException(string message, EndPoint? proxyServer) : Exception($"{message}. Proxy: {proxyServer}") { }
