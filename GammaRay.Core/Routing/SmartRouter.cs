@@ -35,7 +35,13 @@ public class SmartRouter(
 
 		NetClientConfiguration config;
 		var route = _storage.TryGetRoute(endPoint.Host, profile);
-		if (route is null)
+
+		// Overview:
+		// case 1 - No route in storage -> Use last config in queue + start probing
+		// case 2 - Is route in storage, but it is expired -> Use expired route + start probing
+		// case 3 - Valid route in storage -> just use it, no probing
+
+		if (route is null || route.Value.IsValid == false)
 		{
 			var category = _domainCategorizer.GetCategoryForDomain(endPoint.Host.DomainName);
 			var queueName = _routeGrid.GetConfigurationQueueName(profile, category);
@@ -43,19 +49,19 @@ public class SmartRouter(
 
 			StartBackgroundProbingIfNeed(endPoint.Host, profile, queue);
 
-			config = queue.OrderedConfigurations.Last();
+			config = route is null ? queue.OrderedConfigurations.Last() : _configurations.GetConfiguration(route.Value.ConfigurationName);
 
 			logger.Information("Route for {EndPoint} does not exist in storage." +
 				"Router going to try start new probing, now using last config = '{ConfigurationName}' in queue", endPoint, config.Name);
 		}
-		else config = _configurations.GetConfiguration(route);
+		else config = _configurations.GetConfiguration(route.Value.ConfigurationName);
 
 		return new ProxyRoutingResult([config]);
 	}
 
 	private async void StartBackgroundProbingIfNeed(Site site, NetworkProfile profile, ClientConfigurationQueue queue)
 	{
-		var logger = _logger.ForContext("NetworkProfile", profile.Name).ForContext("Site", site);
+		var logger = _logger.ForContext("NetworkProfile", profile.Name).ForContext("Site", site.DomainName);
 
 		if (_probingNow.Add((profile.Name, site)) == false)
 		{
@@ -81,7 +87,7 @@ public class SmartRouter(
 
 			_storage.SaveRoute(site, profile, theBestConfigName);
 
-			logger.Information("Finished probing. Best configuration is '{ConfigurationName}'", profile.Name, site, theBestConfigName);
+			logger.Information("Finished probing. Best configuration is '{ConfigurationName}'", theBestConfigName);
 		}
 		finally
 		{

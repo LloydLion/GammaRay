@@ -1,73 +1,116 @@
-﻿using GammaRay.Core.Routing;
+﻿using GammaRay.Core.Persistence.Models;
+using GammaRay.Core.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Serilog;
+using System.Threading.Channels;
 
 namespace GammaRay.Core.Persistence;
 
-public class RoutePersistenceStorage(
-	IOptions<RoutePersistenceStorage.Options> options
-) : IRoutePersistenceStorage
+public class RoutePersistenceStorage : IRoutePersistenceStorage, IAsyncDisposable
 {
 	private readonly ILogger _logger = Log.ForContext<RoutePersistenceStorage>();
 
+	private readonly Options _options;
+	private readonly AppDbContext _dbContext;
+	private Dictionary<(string Site, string Profile), SiteProfileModel>? _data;
+	private readonly Channel<SiteProfileModel> _writeChannel;
+	private Task? _writerTask;
 
-	private readonly Options _options = options.Value;
-	private readonly SemaphoreSlim _semaphore = new(1);
-	private Dictionary<(string Site, string Profile), string>? _data;
+
+	public RoutePersistenceStorage(IOptions<Options> options, AppDbContext dbContext)
+	{
+		_options = options.Value;
+
+		_writeChannel = Channel.CreateUnbounded<SiteProfileModel>(
+			new UnboundedChannelOptions()
+			{
+				SingleReader = true,
+				SingleWriter = false
+			}
+		);
+
+		_dbContext = dbContext;
+	}
 
 
-	public Dictionary<(string Site, string Profile), string> Data => _data ?? throw new InvalidOperationException("Preload database first");
+	private Dictionary<(string Site, string Profile), SiteProfileModel> Data => _data ??
+		throw new InvalidOperationException("RoutePersistenceStorage not initialized. Call Initialize() before use.");
 
+
+	public void Initialize()
+	{
+		_writerTask = Task.Run(WriterLoopAsync);
+
+		_data = _dbContext.Routes
+			.AsNoTracking()
+			.ToDictionary(s => (s.SiteDomain, s.ProfileName));
+	}
+
+	public RouteToSite? TryGetRoute(Site site, NetworkProfile profile)
+	{
+		if (Data.TryGetValue((site.DomainName, profile.Name), out var val))
+			return new RouteToSite(val.ConfigurationName, val.ValidUntil);
+		return null;
+	}
 
 	public void SaveRoute(Site site, NetworkProfile profile, string optimalConfigurationName)
 	{
-		Data[(site.DomainName, profile.Name)] = optimalConfigurationName;
-		SaveDatabase();
-	}
+		var validUntil = DateTime.UtcNow.Add(_options.RecordTtl);
 
-	public string? TryGetRoute(Site site, NetworkProfile profile)
-	{
-		return Data.GetValueOrDefault((site.DomainName, profile.Name));
-	}
-
-	public void PreloadDatabase()
-	{
-		if (File.Exists(_options.DatabasePath) == false)
+		var model = new SiteProfileModel
 		{
-			_data = [];
-			return;
-		}
+			SiteDomain = site.DomainName,
+			ProfileName = profile.Name,
+			ConfigurationName = optimalConfigurationName,
+			ValidUntil = validUntil
+		};
 
-		_data = File.ReadAllLines(_options.DatabasePath)
-			.Select(s => s.Split('|'))
-			.Where(s => s.Length == 3)
-			.ToDictionary(s => (s[0], s[1]), s => s[2]);
+		Data[(site.DomainName, profile.Name)] = model;
+		_writeChannel.Writer.TryWrite(model);
 	}
 
-	private async void SaveDatabase()
+	private async Task WriterLoopAsync()
 	{
-		if (_semaphore.CurrentCount == 0)
-			return;
 		try
 		{
-			await _semaphore.WaitAsync();
+			while (await _writeChannel.Reader.WaitToReadAsync())
+			{
+				while (_writeChannel.Reader.TryRead(out var item))
+				{
+					var affected = await _dbContext.Routes
+						.Where(s => s.ProfileName == item.ProfileName && s.SiteDomain == item.SiteDomain)
+						.ExecuteUpdateAsync(s => s
+							.SetProperty(p => p.ConfigurationName, item.ConfigurationName)
+							.SetProperty(p => p.ValidUntil, item.ValidUntil)
+						);
 
-			var dataCopy = Data.ToDictionary();
-			await File.WriteAllLinesAsync(_options.DatabasePath, dataCopy.Select(s => $"{s.Key.Site}|{s.Key.Profile}|{s.Value}"));
+					if (affected == 0)
+					{
+						_dbContext.Routes.Add(item);
+						await _dbContext.SaveChangesAsync();
+						_dbContext.ChangeTracker.Clear();
+					}
+				}
+			}
 		}
+		catch (OperationCanceledException) { }
 		catch (Exception ex)
 		{
-			_logger.Error(ex, "Failed to save database");
+			_logger.Error(ex, "WriterLoop failed");
 		}
-		finally
-		{
-			_semaphore.Release();
-		}
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		_writeChannel.Writer.Complete();
+		if (_writerTask is not null)
+			await _writerTask;
 	}
 
 
 	public class Options
 	{
-		public string DatabasePath { get; set; } = "routes.dat";
+		public TimeSpan RecordTtl { get; set; } = TimeSpan.FromHours(1);
 	}
 }
