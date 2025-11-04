@@ -1,5 +1,6 @@
 ﻿using GammaRay.Core.Network;
 using Serilog;
+using System.Net.Sockets;
 
 
 namespace GammaRay.Core.Linux.Network;
@@ -16,7 +17,9 @@ public class InterfaceBasedNetworkIdentifier() : NetworkIdentifierBase(default, 
 
 		var mac = internetInterface.GetPhysicalAddress().ToString();
 		var ip = internetInterface.GetIPProperties().UnicastAddresses
-			.FirstOrDefault(a => a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?.Address.ToString();
-		return new NetworkIdentity([internetInterface.Name, mac, ip ?? "NoIP"]);
+			.FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetwork)?.Address.ToString();
+		var type = internetInterface.NetworkInterfaceType.ToString();
+
+		return new NetworkIdentity([type, mac, ip ?? "NoIP"]);
 	}
 }

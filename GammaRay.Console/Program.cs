@@ -35,8 +35,6 @@ var netId = new GammaRay.Core.Linux.Network.InterfaceBasedNetworkIdentifier();
 
 var prober = new HttpsSiteProber(settingsProvider.GetConfigurations());
 var analyzer = new SimpleProbeResultsAnalyzer();
-var networkProfileRepository = new StubNetworkProfileRepository(settingsProvider.RegisteredProfiles.First());
-
 
 var appDbContext = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
 	.UseSqlite("Data Source=" + (appConfiguration["Database:Location"] ?? "base.db"))
@@ -44,10 +42,13 @@ var appDbContext = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
 );
 InitializeDatabase(appDbContext, Log.ForContext<Program>());
 
-var storage = new RoutePersistenceStorage(Options.Create(new RoutePersistenceStorage.Options()), appDbContext);
-storage.Initialize();
+var routeStorage = new RoutePersistenceDbStorage(Options.Create(new RoutePersistenceDbStorage.Options()), appDbContext);
+routeStorage.Initialize();
 
-var router = new SmartRouter(settingsProvider, settingsProvider, networkProfileRepository, settingsProvider, netId, prober, analyzer, storage);
+var networkProfileRepository = new NetworkProfileDbRepository(appDbContext, settingsProvider.RegisteredProfiles, settingsProvider.RegisteredProfiles.First().Name);
+networkProfileRepository.Initialize();
+
+var router = new SmartRouter(settingsProvider, settingsProvider, networkProfileRepository, settingsProvider, netId, prober, analyzer, routeStorage);
 
 var proxy = new ProxyServer(Options.Create(new ProxyServer.Options()), router);
 
@@ -74,27 +75,4 @@ static void InitializeDatabase(AppDbContext context, ILogger logger)
 	}
 
 	logger.Information("Database initialized");
-}
-
-
-public class StubNetworkProfileRepository : INetworkProfileRepository
-{
-	public StubNetworkProfileRepository(NetworkProfile profile)
-	{
-		DefaultProfile = profile;
-	}
-
-
-	public NetworkProfile DefaultProfile { get; }
-
-
-	public NetworkProfile GetProfileForNetwork(NetworkIdentity network)
-	{
-		return DefaultProfile;
-	}
-
-	public IEnumerable<NetworkIdentity> ListProfileNetworks(NetworkProfile profile)
-	{
-		return [];
-	}
 }

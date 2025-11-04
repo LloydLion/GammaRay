@@ -42,7 +42,8 @@
 
 	"networkProfiles":
 	{
-		"main": { }
+		"main": { },
+		"second": { }
 	},
 
 	"categories":
@@ -60,11 +61,11 @@
 
 	"routeGrid":
 	{
-		"profilesOrder": [ "main" ],
+		"profilesOrder": [ "main", "second" ],
 		"grid":
 		{
-			"forceBlocked": [ "proxy" ],
-			"default": [ "speed" ]
+			"forceBlocked": [ "proxy", "proxy" ],
+			"default": [ "speed", "speed" ]
 		}
 	}
 }
