@@ -1,8 +1,9 @@
-﻿using GammaRay.Core.Network;
+﻿using Dapper;
+using GammaRay.Core.Network;
 using GammaRay.Core.Persistence.Models;
 using GammaRay.Core.Routing;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
+using System.Data;
 
 namespace GammaRay.Core.Persistence;
 
@@ -14,8 +15,8 @@ public sealed class NetworkProfileDbRepository : AsyncDbRepository<string, Netwo
 	private readonly Dictionary<string, NetworkProfile> _profiles;
 
 
-	public NetworkProfileDbRepository(AppDbContext context, IEnumerable<NetworkProfile> profiles, string defaultProfileName)
-		: base(context, _logger)
+	public NetworkProfileDbRepository(IDbConnectionFactory connectionFactory, IEnumerable<NetworkProfile> profiles, string defaultProfileName)
+		: base(connectionFactory, _logger)
 	{
 		_profiles = profiles.ToDictionary(s => s.Name);
 		DefaultProfile = _profiles[defaultProfileName];
@@ -47,14 +48,29 @@ public sealed class NetworkProfileDbRepository : AsyncDbRepository<string, Netwo
 		throw new NotImplementedException();
 	}
 
-	protected override async ValueTask ExecuteWriteAsync(AppDbContext context, NetworkModel item)
+	protected override async ValueTask ExecuteWriteAsync(IDbConnection connection, NetworkModel item)
 	{
-		context.Add(item);
-		await context.SaveChangesAsync();
-		context.ChangeTracker.Clear();
+		await connection.ExecuteAsync(
+		$"""
+		INSERT INTO Networks (Identity, UsedProfile)
+		VALUES (@Identity, @UsedProfile)
+		ON CONFLICT(Identity) DO UPDATE SET
+			UsedProfile = excluded.UsedProfile;
+		""", item);
 	}
 
 	protected override string ExtractKey(NetworkModel value) => value.Identity;
 
-	protected override IEnumerable<NetworkModel> PreloadData(AppDbContext context) => context.Networks.AsNoTracking();
+	protected override IEnumerable<NetworkModel> PreloadData(IDbConnection connection) => connection.Query<NetworkModel>("SELECT * FROM Networks");
+
+	protected override void PerformDatabaseMigration(IDbConnection connection)
+	{
+		connection.Execute(
+		"""
+		CREATE TABLE IF NOT EXISTS Networks (
+		    Identity TEXT PRIMARY KEY,
+		    UsedProfile TEXT
+		);
+		""");
+	}
 }

@@ -1,8 +1,8 @@
-﻿using GammaRay.Core.Persistence;
-using Serilog;
+﻿using Serilog;
+using System.Data;
 using System.Threading.Channels;
 
-namespace GammaRay.Core;
+namespace GammaRay.Core.Persistence;
 
 public abstract class AsyncDbRepository<TKey, TValue> : IAsyncDisposable
 	where TKey : notnull
@@ -10,11 +10,11 @@ public abstract class AsyncDbRepository<TKey, TValue> : IAsyncDisposable
 {
 	private Task? _writerTask;
 	private Dictionary<TKey, TValue>? _data;
-	private readonly AppDbContext _context;
+	private readonly IDbConnectionFactory _connectionFactory;
 	private readonly ILogger _logger;
 	private readonly Channel<TValue> _writeChannel;
 
-	public AsyncDbRepository(AppDbContext context, ILogger logger)
+	public AsyncDbRepository(IDbConnectionFactory connectionFactory, ILogger logger)
 	{
 		_writeChannel = Channel.CreateUnbounded<TValue>(
 			new UnboundedChannelOptions()
@@ -23,7 +23,7 @@ public abstract class AsyncDbRepository<TKey, TValue> : IAsyncDisposable
 				SingleWriter = false
 			}
 		);
-		_context = context;
+		_connectionFactory = connectionFactory;
 		_logger = logger;
 	}
 
@@ -35,7 +35,9 @@ public abstract class AsyncDbRepository<TKey, TValue> : IAsyncDisposable
 	public void Initialize()
 	{
 		_writerTask = Task.Run(WriteLoop);
-		_data = PreloadData(_context).ToDictionary(ExtractKey);
+		using var connection = _connectionFactory.CreateNewConnection();
+		PerformDatabaseMigration(connection);
+		_data = PreloadData(connection).ToDictionary(ExtractKey);
 	}
 
 	public async ValueTask DisposeAsync()
@@ -57,11 +59,13 @@ public abstract class AsyncDbRepository<TKey, TValue> : IAsyncDisposable
 		return value;
 	}
 
-	protected abstract ValueTask ExecuteWriteAsync(AppDbContext context, TValue item);
+	protected abstract ValueTask ExecuteWriteAsync(IDbConnection connection, TValue item);
 
-	protected abstract IEnumerable<TValue> PreloadData(AppDbContext context);
+	protected abstract IEnumerable<TValue> PreloadData(IDbConnection connection);
 
 	protected abstract TKey ExtractKey(TValue value);
+
+	protected abstract void PerformDatabaseMigration(IDbConnection connection);
 
 	private async Task WriteLoop()
 	{
@@ -69,9 +73,10 @@ public abstract class AsyncDbRepository<TKey, TValue> : IAsyncDisposable
 		{
 			while (await _writeChannel.Reader.WaitToReadAsync())
 			{
+				using var connection = _connectionFactory.CreateNewConnection();
 				while (_writeChannel.Reader.TryRead(out var item))
 				{
-					await ExecuteWriteAsync(_context, item);
+					await ExecuteWriteAsync(connection, item);
 				}
 			}
 		}

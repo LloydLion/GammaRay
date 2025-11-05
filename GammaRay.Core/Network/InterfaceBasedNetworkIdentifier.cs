@@ -1,9 +1,8 @@
-﻿using GammaRay.Core.Network;
-using Serilog;
+﻿using Serilog;
 using System.Net.Sockets;
 
 
-namespace GammaRay.Core.Linux.Network;
+namespace GammaRay.Core.Network;
 
 public class InterfaceBasedNetworkIdentifier() : NetworkIdentifierBase(default, _logger)
 {

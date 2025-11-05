@@ -300,7 +300,7 @@ public class ProxyServer
 
 	public class Options
 	{
-		public TimeSpan MasterClientTimeout { get; init; } = TimeSpan.FromSeconds(2);
+		public TimeSpan MasterClientTimeout { get; set; } = TimeSpan.FromSeconds(2);
 	}
 
 	private class ProxyDialException(string message, EndPoint? proxyServer) : Exception($"{message}. Proxy: {proxyServer}") { }

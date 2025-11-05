@@ -222,6 +222,6 @@ public sealed class SettingsProvider(IOptions<SettingsProvider.Options> options)
 
 	public class Options
 	{
-		public required string SettingsFilePath { get; init; }
+		public required string SettingsFilePath { get; set; }
 	}
 }

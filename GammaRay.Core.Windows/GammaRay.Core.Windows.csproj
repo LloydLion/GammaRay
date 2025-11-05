@@ -4,13 +4,15 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <IsTrimmable>true</IsTrimmable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="System.Management" Version="9.0.9" />
-  </ItemGroup>
-
+  <PropertyGroup Condition="'$(BuildAsExecutable)' == 'true'">
+    <OutputType>exe</OutputType>
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishAot>true</PublishAot>
+    <DefineConstants>$(DefineConstants);BuildAsExecutable</DefineConstants>
+  </PropertyGroup>
+  
   <ItemGroup>
     <ProjectReference Include="..\GammaRay.Core\GammaRay.Core.csproj" />
   </ItemGroup>

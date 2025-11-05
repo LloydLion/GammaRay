@@ -1,8 +1,9 @@
-﻿using GammaRay.Core.Persistence.Models;
+﻿using Dapper;
+using GammaRay.Core.Persistence.Models;
 using GammaRay.Core.Routing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Serilog;
+using System.Data;
 
 namespace GammaRay.Core.Persistence;
 
@@ -13,7 +14,7 @@ public class RoutePersistenceDbStorage : AsyncDbRepository<(string Site, string 
 	private readonly Options _options;
 
 
-	public RoutePersistenceDbStorage(IOptions<Options> options, AppDbContext dbContext) : base(dbContext, _logger)
+	public RoutePersistenceDbStorage(IOptions<Options> options, IDbConnectionFactory connectionFactory) : base(connectionFactory, _logger)
 	{
 		_options = options.Value;
 	}
@@ -42,26 +43,35 @@ public class RoutePersistenceDbStorage : AsyncDbRepository<(string Site, string 
 		Write(model);
 	}
 
-	protected override async ValueTask ExecuteWriteAsync(AppDbContext context, SiteProfileModel item)
+	protected override async ValueTask ExecuteWriteAsync(IDbConnection connection, SiteProfileModel item)
 	{
-		var affected = await context.Routes
-			.Where(s => s.ProfileName == item.ProfileName && s.SiteDomain == item.SiteDomain)
-			.ExecuteUpdateAsync(s => s
-				.SetProperty(p => p.ConfigurationName, item.ConfigurationName)
-				.SetProperty(p => p.ValidUntil, item.ValidUntil)
-			);
-
-		if (affected == 0)
-		{
-			context.Routes.Add(item);
-			await context.SaveChangesAsync();
-			context.ChangeTracker.Clear();
-		}
+		await connection.ExecuteAsync(
+		"""
+		INSERT INTO Routes (SiteDomain, ProfileName, ValidUntil, ConfigurationName)
+		VALUES (@SiteDomain, @ProfileName, @ValidUntil, @ConfigurationName)
+		ON CONFLICT(SiteDomain, ProfileName) DO UPDATE SET
+		    ValidUntil = excluded.ValidUntil,
+		    ConfigurationName = excluded.ConfigurationName;
+		""", item);
 	}
 
-	protected override IEnumerable<SiteProfileModel> PreloadData(AppDbContext context) => context.Routes.AsNoTracking();
+	protected override IEnumerable<SiteProfileModel> PreloadData(IDbConnection connection) => connection.Query<SiteProfileModel>("SELECT * FROM Routes");
 
 	protected override (string Site, string Profile) ExtractKey(SiteProfileModel value) => (value.SiteDomain, value.ProfileName);
+
+	protected override void PerformDatabaseMigration(IDbConnection connection)
+	{
+		connection.Query(
+		"""
+		CREATE TABLE IF NOT EXISTS Routes (
+		    SiteDomain TEXT NOT NULL,
+		    ProfileName TEXT NOT NULL,
+		    ValidUntil TEXT NOT NULL,
+		    ConfigurationName TEXT NOT NULL,
+		    PRIMARY KEY (SiteDomain, ProfileName)
+		);
+		""");
+	}
 
 
 	public class Options
