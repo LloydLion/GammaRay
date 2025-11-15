@@ -4,5 +4,5 @@ public interface IRoutePersistenceStorage
 {
 	public RouteToSite? TryGetRoute(Site site, NetworkProfile profile);
 
-	public void SaveRoute(Site site, NetworkProfile profile, string optimalConfigurationName);
+	public void SaveRoute(Site site, NetworkProfile profile, string[] optimalConfigurationsNames);
 }

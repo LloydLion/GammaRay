@@ -2,15 +2,8 @@
 
 public class SimpleProbeResultsAnalyzer : IProbeResultsAnalyzer
 {
-	public int ChooseBestRoute(IEnumerable<ProbeResult> orderedProbeResults)
+	public IEnumerable<ProbeResult> ChooseBestRoutes(IEnumerable<ProbeResult> orderedProbeResults)
 	{
-		int index = 0;
-		foreach (var result in orderedProbeResults)
-		{
-			if (result is ProbeSuccessResult)
-				return index;
-			index++;
-		}
-		return -1;
+		return orderedProbeResults.Where(s => s is ProbeSuccessResult);
 	}
 }

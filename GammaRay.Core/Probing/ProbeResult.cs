@@ -1,6 +1,11 @@
 ﻿namespace GammaRay.Core.Probing;
 
-public abstract record ProbeResult();
+public abstract record ProbeResult()
+{
+	public required NetClientConfiguration UsedConfiguration { get; init; }
+
+	public required Site TargetSite { get; init; }
+}
 
 public sealed record ProbeSuccessResult(TimeSpan AverageResponseTime) : ProbeResult
 {

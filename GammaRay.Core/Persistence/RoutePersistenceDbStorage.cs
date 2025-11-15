@@ -7,7 +7,7 @@ using System.Data;
 
 namespace GammaRay.Core.Persistence;
 
-public class RoutePersistenceDbStorage : AsyncDbRepository<(string Site, string Profile), SiteProfileModel>, IRoutePersistenceStorage, IAsyncDisposable
+public class RoutePersistenceDbStorage : AsyncDbRepository<(string Site, string Profile), RouteModel>, IRoutePersistenceStorage, IAsyncDisposable
 {
 	private static readonly ILogger _logger = Log.ForContext<RoutePersistenceDbStorage>();
 
@@ -24,50 +24,50 @@ public class RoutePersistenceDbStorage : AsyncDbRepository<(string Site, string 
 	{
 		var value = TryRead((site.DomainName, profile.Name));
 		if (value is not null)
-			return new RouteToSite(value.ConfigurationName, value.ValidUntil);
+			return new RouteToSite(value.ConfigurationsString.Split(','), value.ValidUntil);
 		return null;
 	}
 
-	public void SaveRoute(Site site, NetworkProfile profile, string optimalConfigurationName)
+	public void SaveRoute(Site site, NetworkProfile profile, string[] optimalConfigurationsNames)
 	{
 		var validUntil = DateTime.UtcNow.Add(_options.RecordTtl);
 
-		var model = new SiteProfileModel
+		var model = new RouteModel
 		{
 			SiteDomain = site.DomainName,
 			ProfileName = profile.Name,
-			ConfigurationName = optimalConfigurationName,
+			ConfigurationsString = string.Join(',', optimalConfigurationsNames),
 			ValidUntil = validUntil
 		};
 
 		Write(model);
 	}
 
-	protected override async ValueTask ExecuteWriteAsync(IDbConnection connection, SiteProfileModel item)
+	protected override async ValueTask ExecuteWriteAsync(IDbConnection connection, RouteModel item)
 	{
 		await connection.ExecuteAsync(
 		"""
-		INSERT INTO Routes (SiteDomain, ProfileName, ValidUntil, ConfigurationName)
-		VALUES (@SiteDomain, @ProfileName, @ValidUntil, @ConfigurationName)
+		INSERT INTO Routes (SiteDomain, ProfileName, ValidUntil, ConfigurationsString)
+		VALUES (@SiteDomain, @ProfileName, @ValidUntil, @ConfigurationsString)
 		ON CONFLICT(SiteDomain, ProfileName) DO UPDATE SET
 		    ValidUntil = excluded.ValidUntil,
-		    ConfigurationName = excluded.ConfigurationName;
+		    ConfigurationsString = excluded.ConfigurationsString;
 		""", item);
 	}
 
-	protected override IEnumerable<SiteProfileModel> PreloadData(IDbConnection connection) => connection.Query<SiteProfileModel>("SELECT * FROM Routes");
+	protected override IEnumerable<RouteModel> PreloadData(IDbConnection connection) => connection.Query<RouteModel>("SELECT * FROM Routes");
 
-	protected override (string Site, string Profile) ExtractKey(SiteProfileModel value) => (value.SiteDomain, value.ProfileName);
+	protected override (string Site, string Profile) ExtractKey(RouteModel value) => (value.SiteDomain, value.ProfileName);
 
 	protected override void PerformDatabaseMigration(IDbConnection connection)
 	{
-		connection.Query(
+		connection.Execute(
 		"""
 		CREATE TABLE IF NOT EXISTS Routes (
 		    SiteDomain TEXT NOT NULL,
 		    ProfileName TEXT NOT NULL,
 		    ValidUntil TEXT NOT NULL,
-		    ConfigurationName TEXT NOT NULL,
+		    ConfigurationsString TEXT NOT NULL,
 		    PRIMARY KEY (SiteDomain, ProfileName)
 		);
 		""");

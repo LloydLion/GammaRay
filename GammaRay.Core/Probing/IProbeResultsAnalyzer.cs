@@ -2,5 +2,5 @@
 
 public interface IProbeResultsAnalyzer
 {
-	public int ChooseBestRoute(IEnumerable<ProbeResult> orderedProbeResults);
+	public IEnumerable<ProbeResult> ChooseBestRoutes(IEnumerable<ProbeResult> orderedProbeResults);
 }

@@ -211,6 +211,10 @@ public class ProxyServer
 			{
 				continue;
 			}
+			catch (EndpointDialException)
+			{
+				continue;
+			}
 			catch (ProxyDialException ex)
 			{
 				context.Logger.Warning(ex, "Failed dial with upstream proxy server (from '{ConfigurationName}')", configuration.Name);
@@ -285,7 +289,7 @@ public class ProxyServer
 			try
 			{
 				await connectDelegate(client);
-				break;
+				return client;
 			}
 			catch (SocketException)
 			{
@@ -294,7 +298,7 @@ public class ProxyServer
 			}
 		}
 
-		return client;
+		throw new EndpointDialException("Failed to connect");
 	}
 
 
@@ -304,6 +308,7 @@ public class ProxyServer
 	}
 
 	private class ProxyDialException(string message, EndPoint? proxyServer) : Exception($"{message}. Proxy: {proxyServer}") { }
+	private class EndpointDialException(string message) : Exception(message) { }
 
 	private class ActiveInbound(ProxyInbound inboundInfo, Socket socket)
 	{

@@ -33,7 +33,7 @@ public class SmartRouter(
 		var currentNetwork = _networkIdentifier.CurrentIdentity;
 		var profile = _profiles.GetProfileForNetwork(currentNetwork);
 
-		NetClientConfiguration config;
+		IEnumerable<NetClientConfiguration> configs;
 		var route = _storage.TryGetRoute(endPoint.Host, profile);
 
 		// Overview:
@@ -49,14 +49,24 @@ public class SmartRouter(
 
 			StartBackgroundProbingIfNeed(endPoint.Host, profile, queue);
 
-			config = route is null ? queue.OrderedConfigurations.Last() : _configurations.GetConfiguration(route.Value.ConfigurationName);
+			if (route is null)
+			{
+				var config = queue.OrderedConfigurations.Last();
+				configs = [config];
+				logger.Information("Route for {EndPoint} does not exist in storage. " +
+					"Router going to try start new probing, now using last config = '{ConfigurationName}' in queue", endPoint, config.Name);
+			}
+			else
+			{
+				configs = route.Value.ConfigurationsNames.Select(_configurations.GetConfiguration).ToArray();
 
-			logger.Information("Route for {EndPoint} does not exist in storage." +
-				"Router going to try start new probing, now using last config = '{ConfigurationName}' in queue", endPoint, config.Name);
+				logger.Information("Route for {EndPoint} does exist in storage, but it outdated. " +
+					"Router going to try start new probing, now using it: {Configurations}", endPoint, configs);
+			}
 		}
-		else config = _configurations.GetConfiguration(route.Value.ConfigurationName);
+		else configs = route.Value.ConfigurationsNames.Select(_configurations.GetConfiguration).ToArray();
 
-		return new ProxyRoutingResult([config]);
+		return new ProxyRoutingResult(configs);
 	}
 
 	private async void StartBackgroundProbingIfNeed(Site site, NetworkProfile profile, ClientConfigurationQueue queue)
@@ -73,21 +83,21 @@ public class SmartRouter(
 		{
 			logger.Information("Started probing", profile.Name, site);
 
-			string? theBestConfigName;
+			string[]? bestConfigurations;
 			if (queue.OrderedConfigurations.Count() == 1)
 			{
-				theBestConfigName = queue.OrderedConfigurations.Single().Name;
+				bestConfigurations = [queue.OrderedConfigurations.Single().Name];
 			}
 			else
 			{
-				theBestConfigName = await chooseBestConfigurationAsync(site, queue, logger);
-				if (theBestConfigName is null) // failed
+				bestConfigurations = await chooseBestConfigurationAsync(site, queue, logger);
+				if (bestConfigurations is null) // failed
 					return;
 			}
 
-			_storage.SaveRoute(site, profile, theBestConfigName);
+			_storage.SaveRoute(site, profile, bestConfigurations);
 
-			logger.Information("Finished probing. Best configuration is '{ConfigurationName}'", theBestConfigName);
+			logger.Information("Finished probing. Best configuration is '{ConfigurationName}'", bestConfigurations);
 		}
 		finally
 		{
@@ -95,7 +105,7 @@ public class SmartRouter(
 		}
 
 
-		async Task<string?> chooseBestConfigurationAsync(Site site, ClientConfigurationQueue queue, ILogger logger)
+		async Task<string[]?> chooseBestConfigurationAsync(Site site, ClientConfigurationQueue queue, ILogger logger)
 		{
 			try
 			{
@@ -103,14 +113,9 @@ public class SmartRouter(
 					_prober.ProbeAsync(site, config.Name)
 				));
 
-				var theBestIndex = _analyzer.ChooseBestRoute(results);
+				var bestConfigurations = _analyzer.ChooseBestRoutes(results);
 
-				if (theBestIndex == -1)
-					throw new Exception("Site is unreachable, failed to route.");
-
-				var theBestConfig = queue.OrderedConfigurations.ElementAt(theBestIndex);
-
-				return theBestConfig.Name;
+				return bestConfigurations.Select(s => s.UsedConfiguration.Name).ToArray();
 			}
 			catch (Exception ex)
 			{

@@ -83,7 +83,7 @@ internal class Program
 			.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
 
 
-		InitializeDatabase(services.GetRequiredService<IDbConnectionFactory>(), logger);
+		InitializeDatabase(services.GetRequiredService<IDbConnectionFactory>(), logger, args);
 		services.GetRequiredService<SettingsProvider>().LoadSettings();
 		services.GetRequiredService<NetworkProfileDbRepository>().Initialize();
 		services.GetRequiredService<RoutePersistenceDbStorage>().Initialize();
@@ -95,9 +95,14 @@ internal class Program
 
 
 
-		static void InitializeDatabase(IDbConnectionFactory connectionFactory, ILogger logger)
+		static void InitializeDatabase(IDbConnectionFactory connectionFactory, ILogger logger, string[] args)
 		{
 #if DEBUG
+			if (args.Contains("--no-db-drop"))
+			{
+				logger.Information("Due DEBUG build mode, database would be deleted, but '--no-db-drop' flag set");
+				return;
+			}
 			using var connection = connectionFactory.CreateNewConnection();
 			logger.Information("Due DEBUG build mode, database will be deleted then created new");
 			var tables = connection.Query<string>("SELECT name FROM sqlite_master WHERE type='table';");
@@ -131,6 +136,7 @@ internal class Program
 			if (fileSection.Exists())
 			{
 				var path = fileSection.GetValue<string>("Path") ?? throw new KeyNotFoundException("No path to log file, if File sink is used 'Path' is required");
+				path = Environment.ExpandEnvironmentVariables(path);
 				var rollingInterval = fileSection.GetValue<RollingInterval>("RollingInterval");
 
 				loggerConfig.WriteTo.File(

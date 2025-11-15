@@ -56,7 +56,7 @@ public class HttpsSiteProber : ISiteProber
 				var hitResult = await PerformHitAsync(logger, uri, client, token);
 				results.Add(hitResult);
 
-				var result = TryCreateResultIfPossible(results, config.RequestCount);
+				var result = TryCreateResultIfPossible(results, config.RequestCount, (target, config));
 				if (result is not null)
 				{
 					logger.Debug("Probing finished with result: {Result}", result);
@@ -67,7 +67,8 @@ public class HttpsSiteProber : ISiteProber
 			}
 
 			logger.Warning("Reached maximum number of request, got inconsistent result");
-			return new ProbeInconsistentResult();
+			return new ProbeInconsistentResult()
+				{ TargetSite = target, UsedConfiguration = config };
 		}
 		catch (Exception ex)
 		{
@@ -102,7 +103,7 @@ public class HttpsSiteProber : ISiteProber
 		}
 	}
 
-	private ProbeResult? TryCreateResultIfPossible(List<HitResult> results, int minHitCount)
+	private ProbeResult? TryCreateResultIfPossible(List<HitResult> results, int minHitCount, (Site Site, NetClientConfiguration Config) parameters)
 	{
 		HitType type = results[0].Type;
 		int consistencyStartIndex = 0;
@@ -125,15 +126,18 @@ public class HttpsSiteProber : ISiteProber
 
 		if (type == HitType.Success)
 		{
-			return new ProbeSuccessResult(slice.Aggregate(TimeSpan.Zero, (acc, s) => acc + s.Time) / count);
+			return new ProbeSuccessResult(slice.Aggregate(TimeSpan.Zero, (acc, s) => acc + s.Time) / count)
+				{ TargetSite = parameters.Site, UsedConfiguration = parameters.Config };
 		}
 		else if (type == HitType.Failure)
 		{
-			return new ProbeFailureResult(slice.Select(s => s.Exception).ToArray()!);
+			return new ProbeFailureResult(slice.Select(s => s.Exception).ToArray()!)
+				{ TargetSite = parameters.Site, UsedConfiguration = parameters.Config };
 		}
 		else
 		{
-			return new ProbeTimeoutResult();
+			return new ProbeTimeoutResult()
+				{ TargetSite = parameters.Site, UsedConfiguration = parameters.Config };
 		}
 	}
 
