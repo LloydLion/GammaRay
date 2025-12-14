@@ -1,4 +1,4 @@
-﻿using GammaRay.Core.Network;
+using GammaRay.Core.Network;
 using GammaRay.Core.Probing;
 using GammaRay.Core.Proxy;
 using Serilog;
@@ -32,6 +32,13 @@ public class SmartRouter(
 		logger.Debug("Routing new request to {EndPoint}", endPoint);
 		var currentNetwork = _networkIdentifier.CurrentIdentity;
 		var profile = _profiles.GetProfileForNetwork(currentNetwork);
+		var category = _domainCategorizer.GetCategoryForDomain(endPoint.Host.DomainName);
+		var queue = _configurations.GetConfigurationQueue(_routeGrid.GetConfigurationQueueName(profile, category));
+
+		if (queue.OrderedConfigurations is [var singleConfiguration])
+		{
+			return new ProxyRoutingResult([singleConfiguration]);
+		}
 
 		IEnumerable<NetClientConfiguration> configs;
 		var route = _storage.TryGetRoute(endPoint.Host, profile);
@@ -43,15 +50,12 @@ public class SmartRouter(
 
 		if (route is null || route.Value.IsValid == false)
 		{
-			var category = _domainCategorizer.GetCategoryForDomain(endPoint.Host.DomainName);
-			var queueName = _routeGrid.GetConfigurationQueueName(profile, category);
-			var queue = _configurations.GetConfigurationQueue(queueName);
 
 			StartBackgroundProbingIfNeed(endPoint.Host, profile, queue);
 
 			if (route is null)
 			{
-				var config = queue.OrderedConfigurations.Last();
+				var config = queue.OrderedConfigurations[^1];
 				configs = [config];
 				logger.Information("Route for {EndPoint} does not exist in storage. " +
 					"Router going to try start new probing, now using last config = '{ConfigurationName}' in queue", endPoint, config.Name);
@@ -83,17 +87,12 @@ public class SmartRouter(
 		{
 			logger.Information("Started probing", profile.Name, site);
 
-			string[]? bestConfigurations;
-			if (queue.OrderedConfigurations.Count() == 1)
-			{
-				bestConfigurations = [queue.OrderedConfigurations.Single().Name];
-			}
-			else
-			{
-				bestConfigurations = await chooseBestConfigurationAsync(site, queue, logger);
-				if (bestConfigurations is null) // failed
-					return;
-			}
+            string[]? bestConfigurations = await chooseBestConfigurationAsync(site, queue, logger);
+			if (bestConfigurations is null) // failed
+				return;
+			if (bestConfigurations is { Length: 0 }) // no route -> use last (default) configuration
+				bestConfigurations = [queue.OrderedConfigurations[^1].Name];
+			
 
 			_storage.SaveRoute(site, profile, bestConfigurations);
 

@@ -1,8 +1,8 @@
-﻿namespace GammaRay.Core.Routing;
+namespace GammaRay.Core.Routing;
 
-public class ClientConfigurationQueue(string name, IEnumerable<NetClientConfiguration> configurations)
+public class ClientConfigurationQueue(string name, IReadOnlyList<NetClientConfiguration> configurations)
 {
 	public string Name { get; } = name;
 
-	public IEnumerable<NetClientConfiguration> OrderedConfigurations { get; } = configurations;
+	public IReadOnlyList<NetClientConfiguration> OrderedConfigurations { get; } = configurations;
 }
