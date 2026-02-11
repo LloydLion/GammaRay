@@ -1,4 +1,4 @@
-﻿#if BuildAsExecutable
+#if BuildAsExecutable
 using GammaRay.Core.Windows.Management;
 using GammaRay.Core.Windows.Network;
 

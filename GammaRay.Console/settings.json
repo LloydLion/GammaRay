@@ -1,4 +1,4 @@
-﻿{
+{
 	"inbounds":
 	{
 		"localhost":
@@ -11,46 +11,160 @@
 		{
 			"protocol": "http",
 			"endpoint": "127.0.0.2:9999"
+		},
+
+		"socks1": 
+		{
+			"protocol": "socks",
+			"endpoint": "127.0.0.2:2222"
 		}
 	},
 
-	"configurations":
+	"internetAccessPoints":
 	{
 		"direct":
 		{
-			"timeoutMs": 10000,
-			"requestInternalMs": 3000,
-			"requestCount": 3,
-			"maxRequestCount": 5
+			"type": "direct"
 		},
 
-		"proxy":
+		"finland-proxy":
 		{
-			"proxyServer": "127.0.0.1:1083",
-			"timeoutMs": 10000,
-			"requestInternalMs": 3000,
-			"requestCount": 3,
-			"maxRequestCount": 5
+			"type": "remote",
+			"channels":
+			{
+				"vless-reality-xhttp":
+				{
+					"tags": ["sni-fake"],
+					"priority": 1,
+					"protocol": "http",
+					"endpoint": "127.0.0.2:1080"
+				},
+				"vless-reality-tcp":
+				{
+					"tags": ["sni-fake"],
+					"priority": 2,
+					"protocol": "socks",
+					"endpoint": "127.0.0.2:1081"
+				},
+				"shadowsocks":
+				{
+					"priority": 3,
+					"protocol": "http",
+					"endpoint": "127.0.0.2:1082"
+				},
+				"hysteria2":
+				{
+					"priority": 4,
+					"protocol": "socks",
+					"endpoint": "127.0.0.2:1083"
+				},
+				"*":
+				{
+					"testEndpoint": "google.com:443/tcp",
+					"probingConfiguration": "HTTP"
+				}
+			}
 		}
 	},
 
-	"priorityQueues":
+	"probing":
+	{
+		"configurations":
+		{
+			"HTTP":
+			{
+				"method": "http",
+				"useTls": true,
+				"url": "/",
+				"sucessCriteria": "anyResponse" //or "sucessResponse"
+			},
+
+			"UDP":
+			{
+				"method": "udp",
+				"someProperty": "lalala"
+			},
+
+			"*":
+			{
+				"timeoutMs": 10000,
+				"hitInternalMs": 3000,
+				"hitCount": 3,
+				"maxHitCount": 5
+			}
+		},
+
+		"selectionRules":
+		[
+			{
+				"domain": "file.txt",
+				"use": "HTTP"
+			},
+			{
+				"protocol": "tcp",
+				"port": [ 80, 443 ],
+				"use": "HTTP"
+			},
+			
+			{
+				"protocol": "udp",
+				"use": "UDP"
+			}
+		]
+	},
+
+	"routeMaking": //TODO: imagine better name
+	{
+		"routeLifetimeH": 12
+	},
+
+	"channelAnalys": //TODO: imagine better name
+	{
+		"analysLifetimeH": 6
+	},
+
+	"webClientConfigurations": 
+	{
+		"direct": 
+		{
+			"internetAccessPoint": "direct"
+		},
+		"sni-fake":
+		{
+			"internetAccessPoint": "proxy",
+			"requireChannelTags": [["sni-fake"]]
+		},
+		"proxy":
+		{
+			"internetAccessPoint": "proxy"
+		}
+	},
+
+	"priorityQueues": //!! rename
 	{
 		"speed": [ "direct", "proxy" ],
-		"proxy": [ "proxy" ]
+		"sni-fake": [ "sni-fake", "proxy" ],
+
+		"forceDirect": [ "direct" ],
+		"forceProxy": [ "proxy" ]
 	},
 
 	"networkProfiles":
 	{
-		"main": { },
+		"main": { "isDefault": true },
 		"second": { }
 	},
 
-	"categories":
+	"domainCategories":
 	{
-		"forceBlocked":
+		"blocked":
 		{
-			"list": "site.txt"
+			"list": "blocked.txt"
+		},
+
+		"local":
+		{
+			"list": "local.txt"
 		},
 
 		"default":
@@ -59,13 +173,14 @@
 		}
 	},
 
-	"routeGrid":
+	"routeGrid": //!! rename
 	{
 		"profilesOrder": [ "main", "second" ],
 		"grid":
 		{
-			"forceBlocked": [ "proxy", "proxy" ],
-			"default": [ "speed", "speed" ]
+			"blocked": [ "proxy", "proxy" ],
+			"local": [ "forceDirect", "sni-fake" ],
+			"default": [ "speed", "sni-fake" ]
 		}
 	}
 }
