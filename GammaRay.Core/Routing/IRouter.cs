@@ -1,5 +1,5 @@
-using GammaRay.Core.Channels;
 using GammaRay.Core.Inbound;
+using GammaRay.Core.InternetAccess.Channels;
 
 namespace GammaRay.Core.Routing;
 

@@ -2,7 +2,7 @@ using GammaRay.Core.Network;
 using GammaRay.Core.Routing;
 using System.Collections.Immutable;
 
-namespace GammaRay.Core.Channels
+namespace GammaRay.Core.InternetAccess.Channels
 {
 	public sealed class IAPChannel(string driverName, GenericWebEndPoint endPoint)
 	{

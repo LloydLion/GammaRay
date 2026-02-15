@@ -1,11 +1,11 @@
 using GammaRay.Core;
-using GammaRay.Core.Channels;
 using GammaRay.Core.Inbound;
-using GammaRay.Core.Network;
+using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
 using Serilog;
+using System.Net;
 
 internal class Program
 {
@@ -16,7 +16,7 @@ internal class Program
 			.CreateLogger();
 
 		var httpInboundDriver = new HTTPInboundDriver(Options.Create(new HTTPInboundDriver.Options { }));
-		var inbound = httpInboundDriver.CreateInbound(new GenericWebEndPoint(new WebHost("127.0.0.3"), 2000));
+		var inbound = httpInboundDriver.CreateInbound(new IPEndPoint(new IPAddress([127, 0, 0, 3]), 2000));
 
 		var channelRegistry = new ReflectionBasedDriverRegistry<IChannelDriver>([new LocalChannelDriver()]);
 

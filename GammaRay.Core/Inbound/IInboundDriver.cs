@@ -1,8 +1,8 @@
-using GammaRay.Core.Network;
+using System.Net;
 
 namespace GammaRay.Core.Inbound;
 
 public interface IInboundDriver
 {
-	public IInbound CreateInbound(GenericWebEndPoint localEndPoint);
+	public IInbound CreateInbound(IPEndPoint localEndPoint);
 }

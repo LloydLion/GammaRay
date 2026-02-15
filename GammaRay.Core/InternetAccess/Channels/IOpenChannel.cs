@@ -1,6 +1,6 @@
 using GammaRay.Core.Network.Flow;
 
-namespace GammaRay.Core.Channels;
+namespace GammaRay.Core.InternetAccess.Channels;
 
 public interface IOpenChannel : IAsyncDisposable
 {

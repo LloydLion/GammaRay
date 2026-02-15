@@ -1,3 +1,3 @@
 namespace GammaRay.Core.Routing;
 
-public record NetworkProfile(string Name);
+public sealed record NetworkProfile(string Name);

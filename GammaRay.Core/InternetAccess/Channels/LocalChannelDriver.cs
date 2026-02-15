@@ -5,7 +5,7 @@ using GammaRay.Core.Utils;
 using System.Net;
 using System.Net.Sockets;
 
-namespace GammaRay.Core.Channels;
+namespace GammaRay.Core.InternetAccess.Channels;
 
 [RecommendedDriverName("local")]
 public sealed class LocalChannelDriver : IChannelDriver

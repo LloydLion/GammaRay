@@ -1,8 +1,6 @@
-using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow;
 using GammaRay.Core.Network.Flow.Implementation;
 using GammaRay.Core.Protocols.HTTP;
-using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
 using Serilog;
 using System.Net;
@@ -14,12 +12,12 @@ using HttpResponseHeader = GammaRay.Core.Protocols.HTTP.HttpResponseHeader;
 namespace GammaRay.Core.Inbound;
 
 [RecommendedDriverName("http")]
-public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> options)
+public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> options) : IInboundDriver
 {
 	private readonly Options _options = options.Value;
 
 
-	public IInbound CreateInbound(GenericWebEndPoint localEndPoint)
+	public IInbound CreateInbound(IPEndPoint localEndPoint)
 	{
 		return new Inbound(localEndPoint, _options);
 	}
@@ -30,7 +28,7 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 		public TimeSpan MasterClientTimeout { get; set; } = TimeSpan.FromSeconds(2);
 	}
 
-	private class Inbound(GenericWebEndPoint localEndPoint, HTTPInboundDriver.Options options) : IInbound
+	private class Inbound(IPEndPoint localEndPoint, Options options) : IInbound
 	{
 		private static readonly ILogger _logger = Log.ForContext<Inbound>();
 
@@ -41,7 +39,7 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 			Encoding.UTF8.GetBytes(ConnectionEstablishedMessageString);
 
 
-		private readonly GenericWebEndPoint _localEndPoint = localEndPoint;
+		private readonly IPEndPoint _localEndPoint = localEndPoint;
 		private readonly Options _options = options;
 		private IncomingRequestCallback? _requestCallback;
 
@@ -156,8 +154,7 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 		private Socket CreateSocket()
 		{
 			var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-			var ipAddress = IPAddress.Parse(_localEndPoint.Host.Domain);
-			socket.Bind(new IPEndPoint(ipAddress, _localEndPoint.Port));
+			socket.Bind(_localEndPoint);
 			return socket;
 		}
 

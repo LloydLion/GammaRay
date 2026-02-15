@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace GammaRay.Core.Utils;
 
-public sealed class ReflectionBasedDriverRegistry<T>(IEnumerable<T> drivers) : IDriverRegistry<T>
+public sealed class ReflectionBasedDriverRegistry<T>(IEnumerable<T> drivers) : IDriverRegistry<T> where T : notnull
 {
 	private readonly Dictionary<string, T> _drivers = drivers.ToDictionary(s =>
 		{
