@@ -17,6 +17,11 @@
     <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.10" />
     <PackageReference Include="Nito.AsyncEx.Context" Version="5.1.2" />
     <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+   
+  <ItemGroup>
+    <Folder Include="Persistance\" />
   </ItemGroup>
 
 </Project>

@@ -2,20 +2,20 @@ using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.Network.Identity;
+using GammaRay.Core.Routing.Categorization;
+using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using GammaRay.Core.Services.Probing;
-using GammaRay.Core.Utils;
 
 namespace GammaRay.Core.Routing;
 
 public sealed class SmartRouter(
-	ITimeService _time,
-	IInternetAccessPointProvider _internetAccessPointProvider,
+	InternetAccessPointProvider _internetAccessPointProvider,
 
 	INetworkIdentifier _networkIdentifier,
-	INetworkProfileRepository _networkProfileRepository,
-	IEndpointCategorizer _endpointCategorizer,
-	IRoutingGridResolver _routingGridResolver,
+	INetworkProfileMappingRepository _networkProfileRepository,
+	EndPointCategoriesProvider _endpointCategorizer,
+	RoutingGridProvider _routingGridResolver,
 
 	IServiceRepository _serviceRepository,
 	ICapabilityDetector _capabilityDetector,
@@ -37,21 +37,19 @@ public sealed class SmartRouter(
 
 		
 		var service = _serviceRepository.TryGetService(context.TargetEndPoint);
-		if (service is null || service.ValidUntil <= _time.Now)
+		if (service is null || service.ValidUntil <= context.InitialTime)
 		{
 			var capability = _capabilityDetector.Detect(context);
-			service = new Service(context.TargetEndPoint, capability, _time.Now.AddDays(2));
+			service = new Service(context.TargetEndPoint, capability, context.InitialTime.AddDays(2));
 			_serviceRepository.RegisterService(service);
 		}
 
 
 		var route = _routeRepository.TryGetRoute(service);
-		if (route is null || route.ValidUntil <= _time.Now)
+		if (route is null || route.ValidUntil <= context.InitialTime)
 			_prober.StartProbing(service, routingConfiguration.GetExtendedIAPChain(_internetAccessPointProvider), _routeRepository);
 
-		var chain = route?.Chain;
-		chain ??= routingConfiguration.DefaultIAPChain;
-
+		var chain = route is not null ? route.Chain : routingConfiguration.DefaultIAPChain;
 
 		var result = chain.Blobs.SelectMany(blob =>
 			blob.Points.SelectMany(iap =>

@@ -1,6 +1,6 @@
 namespace GammaRay.Core.InternetAccess;
 
-public sealed class InternetAccessPointBlob(IReadOnlyCollection<InternetAccessPoint> internetAccessPoints)
+public readonly struct InternetAccessPointBlob(IReadOnlyCollection<InternetAccessPoint> internetAccessPoints)
 {
 	public static readonly InternetAccessPointBlob Empty = new([]);
 

@@ -2,6 +2,6 @@ namespace GammaRay.Core.Utils;
 
 public enum RequirementPolicy
 {
-	Restricted,
+	Restricted = default,
 	Prioritized
 }

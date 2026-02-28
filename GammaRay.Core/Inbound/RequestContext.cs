@@ -8,4 +8,6 @@ public sealed class RequestContext(WebEndPoint targetEndPoint, IDataFlow incomin
 	public WebEndPoint TargetEndPoint { get; } = targetEndPoint;
 
 	public IDataFlow IncomingDataFlow { get; } = incomingDataFlow;
+
+	public DateTime InitialTime { get; } = DateTime.UtcNow;
 }

@@ -1,0 +1,61 @@
+inbounds:
+  localhost: http://127.0.0.1:9999
+  host2:
+    protocol: http
+    endPoint: 127.0.0.2:9999
+  socks1:
+    protocol: socks
+    endPoint: 127.0.0.2:2222
+
+internetAccessPoints:
+  finlandProxy:
+    channels:
+      vless-reality-raw:
+        protocol: socks
+        endPoint: 127.0.0.2:2011
+        tags: [ fake-sni ]
+        availableInNetwork: []
+        parameters:
+          username: aaaa
+          password: bbb
+      shadowsocks:
+        url: socks://127.0.0.2:2012?username=user2&password=password2 # Short URL form
+        tags: [ tag1, tag2 ]
+        availableInNetwork: [ main, second ]
+
+capabilityClasses:
+  HTTPS:
+    detectionRules:
+      - transport: tcp # TransportType .Transport [tcp -> StreamBased, udp -> DatagramBased]
+        port: 443 # int .Port
+        preread: # CapabilityDetectionRulePrereadConfiguration? .Preread
+          protocol: tls # string .Protocol
+          parameters: # PrereadParameterConfiguration[] .Parameters
+            - "alpn: saveAs='PropertyName' allowedValues=['h2', 'h3', 'http/1.1', 'h2c']"
+            # string format: "[ParameterName]: [Option1]=[Value1] [Option2]=[Value2]"
+            # saveAs (string? .SaveAs): property name or null, Name for capability parameter or null if no property required
+            # allowedValues (string[] .AllowedValues): format: ['value1', 'value2', 'value3'], List of allowed values for parameter,			
+
+endpointRoutingConfigurations:
+  sniFake: # EndpointRoutingConfiguration
+    IAPChain: [ [finlandProxy], [], [local:*] ] # InternetAccessPointChain .IAPCHain
+    queueMode: prioritized # enum: restricted | prioritized # RequirementPolicy .QueueMode
+    requiredChannelTags: [[sni-fake]] # string[] .ChannelTags
+    tagsRequimentMode: restricted # RequirementPolicy .TagsRequimentMode
+
+networkProfiles:
+  main:
+  second:
+
+endPointCategories:
+  blocked:
+    list: blocked.txt
+  local:
+    list: local.txt
+
+routingGrid:
+  profilesOrder: [ main, second ]
+  grid:
+    blocked: [ proxy, proxy ]
+    local: [ forceDirect", sni-fake ]
+    default: [ speed, sni-fake ]

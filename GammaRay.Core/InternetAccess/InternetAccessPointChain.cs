@@ -1,21 +1,26 @@
 namespace GammaRay.Core.InternetAccess;
 
-public sealed class InternetAccessPointChain(IReadOnlyList<InternetAccessPointBlob> blobs)
+public struct InternetAccessPointChain(IReadOnlyList<InternetAccessPointBlob> blobs)
 {
 	public static readonly InternetAccessPointChain Empty = new([]);
 
 	public IReadOnlyList<InternetAccessPointBlob> Blobs { get; } = blobs;
 
+	public IReadOnlyList<InternetAccessPoint> PlainListOfPoints
+	{
+		get { field ??= Blobs.SelectMany(s => s.Points).ToArray(); return field; }
+	}
 
-	public InternetAccessPointChain Reverse()
+
+	public readonly InternetAccessPointChain Reverse()
 	{
 		return new InternetAccessPointChain(Blobs.Reverse().ToArray());
 	}
 
-	public InternetAccessPointChain Extend(IInternetAccessPointProvider internetAccessPointProvider)
+	public InternetAccessPointChain Extend(InternetAccessPointProvider internetAccessPointProvider)
 	{
-		var IAPs = internetAccessPointProvider.GetAll();
-		var lastBlob = new InternetAccessPointBlob(IAPs.Where(s => Blobs.Any(blob => blob.Points.Contains(s)) == false).ToArray());
+		var IAPs = internetAccessPointProvider.PlainInternetAccessPoints;
+		var lastBlob = new InternetAccessPointBlob(IAPs.Except(PlainListOfPoints).ToArray());
 		var extendedChain = new InternetAccessPointChain([.. Blobs, lastBlob]);
 		return extendedChain;
 	}

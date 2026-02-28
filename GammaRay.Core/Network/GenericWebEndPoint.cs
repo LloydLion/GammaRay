@@ -18,4 +18,6 @@ public readonly record struct GenericWebEndPoint(WebHost Host, int Port)
 		}
 		return new GenericWebEndPoint(new WebHost(value[..idx]), int.Parse(value[(idx + 1)..]));
 	}
+
+	public static GenericWebEndPoint Parse(string value) => Parse(value, -1);
 }
