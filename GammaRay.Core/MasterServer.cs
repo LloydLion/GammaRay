@@ -34,9 +34,7 @@ namespace GammaRay.Core
 		{
 			IReadOnlyList<IAPChannel> channelsQueue = _router.MakeRoutingDecision(context);
 
-			TransportType requestedTransportType = context.TargetEndPoint.Protocol;
-
-			await using IOpenChannel openChannel = await OpenChannelAsync(channelsQueue, requestedTransportType);
+			await using IOpenChannel openChannel = await OpenChannelAsync(channelsQueue, context.TargetEndPoint);
 
 			IDataFlow correspondingFlow = openChannel.GetFlow();
 			IDataFlow incomingFlow = context.IncomingDataFlow;
@@ -44,13 +42,13 @@ namespace GammaRay.Core
 			await incomingFlow.JoinAsync(correspondingFlow);
 		}
 
-		private async ValueTask<IOpenChannel> OpenChannelAsync(IReadOnlyList<IAPChannel> channelsQueue, TransportType requestedTransportType)
+		private async ValueTask<IOpenChannel> OpenChannelAsync(IReadOnlyList<IAPChannel> channelsQueue, WebEndPoint targetEndPoint)
 		{
 			IOpenChannel? openChannel = null;
 			foreach (var channel in channelsQueue)
 			{
 				IChannelDriver driver = _channelDriverRegistry.ProvideDriver(channel.DriverName);
-				openChannel = await driver.TryOpenChannelAsync(channel, requestedTransportType);
+				openChannel = await driver.TryOpenChannelAsync(channel, targetEndPoint);
 				if (openChannel is not null)
 					break;
 			}

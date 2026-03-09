@@ -19,7 +19,7 @@ public sealed class SmartRouter(
 
 	IServiceRepository _serviceRepository,
 	ICapabilityDetector _capabilityDetector,
-	
+
 	IServiceRouteRepository _routeRepository,
 	IProber _prober,
 
@@ -30,12 +30,12 @@ public sealed class SmartRouter(
 	{
 		var networkIdentity = _networkIdentifier.CurrentIdentity;
 		var networkProfile = _networkProfileRepository.GetProfileFor(networkIdentity);
-		
+
 		var endPointCategory = _endpointCategorizer.Categorize(context.TargetEndPoint);
 
 		var routingConfiguration = _routingGridResolver.GetConfiguration(networkProfile, endPointCategory);
 
-		
+
 		var service = _serviceRepository.TryGetService(context.TargetEndPoint);
 		if (service is null || service.ValidUntil <= context.InitialTime)
 		{

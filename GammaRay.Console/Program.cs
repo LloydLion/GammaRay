@@ -36,11 +36,11 @@ internal class Program
 	private static void LoadSettings(string path)
 	{
 		// Entities:
-		// - InboundConfiguration +
-		// - NetworkProfile +
-		// - EndPointCategory +
-		// - InternetAccessPoint +
-		// - CapabilityClass +
+		// - InboundConfiguration
+		// - NetworkProfile
+		// - EndPointCategory
+		// - InternetAccessPoint
+		// - CapabilityClass
 		// - EndPointRoutingConfiguration
 		//
 		// Additionally: RoutingGrid
@@ -49,7 +49,7 @@ internal class Program
 
 		var fileSystemLocator = new Locator();
 		var YAMLLoader = new YAMLConfigurationLoader();
-		
+
 		var inboundRawProvider = new YAMLInboundRawProvider();
 		var networkProfileRawProvider = new YAMLNetworkProfileRawProvider();
 		var endPointCategoryRawProvider = new YAMLEndPointCategoryRawProvider(fileSystemLocator);
@@ -87,7 +87,7 @@ internal class Program
 		public IReadOnlyList<IAPChannel> MakeRoutingDecision(RequestContext context)
 		{
 			return [
-				new IAPChannel("local", context.TargetEndPoint.GenericEndPoint)
+				new IAPChannel("local", default)
 			];
 		}
 	}

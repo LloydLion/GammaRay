@@ -6,4 +6,10 @@ public readonly record struct WebHost(string Domain)
 	{
 		return Domain;
 	}
+
+
+	public static implicit operator string(WebHost host)
+	{
+		return host.Domain;
+	}
 }

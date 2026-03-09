@@ -13,7 +13,7 @@ public sealed class YAMLEndPointRoutingConfigurationRawProvider : IRawSettingsPr
 
 
 	public bool IsInitialized => _endpointRoutingConfigurations is not null;
-	
+
 
 	public IReadOnlyDictionary<string, EndPointRoutingConfiguration> Get()
 	{
@@ -42,7 +42,8 @@ public sealed class YAMLEndPointRoutingConfigurationRawProvider : IRawSettingsPr
 			var requiredChannelTags = node.TryBindChild<string[][]>("requiredChannelTags") ?? [];
 
 			var rawIAPChain = node["IAPChain"].Bind<string[][]>();
-			var IAPChain = new InternetAccessPointChain(rawIAPChain.Select(blob => new InternetAccessPointBlob(blob.SelectMany(iapPattern => {
+			var IAPChain = new InternetAccessPointChain(rawIAPChain.Select(blob => new InternetAccessPointBlob(blob.SelectMany(iapPattern =>
+			{
 				if (iapPattern.EndsWith('*'))
 					return accessPoints.Where(IAP => IAP.Name.StartsWith(iapPattern));
 				else return [accessPoints.Single(IAP => IAP.Name == iapPattern)];

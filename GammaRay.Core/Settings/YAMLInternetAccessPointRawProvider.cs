@@ -31,7 +31,7 @@ public class YAMLInternetAccessPointRawProvider : IRawSettingsProvider<IReadOnly
 		YamlMappingNode node,
 		IReadOnlyDictionary<string, NetworkProfile> profiles
 	)
-	{		
+	{
 		return node.ScalarChildrenMap.Select(kv =>
 		{
 			var name = kv.Key;

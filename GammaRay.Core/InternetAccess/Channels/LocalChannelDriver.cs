@@ -10,25 +10,28 @@ namespace GammaRay.Core.InternetAccess.Channels;
 [RecommendedDriverName("local")]
 public sealed class LocalChannelDriver : IChannelDriver
 {
-	public async ValueTask<IOpenChannel?> TryOpenChannelAsync(IAPChannel channel, TransportType requestedTransportType)
+	public async ValueTask<IOpenChannel?> TryOpenChannelAsync(IAPChannel channel, WebEndPoint targetEndPoint)
 	{
 		try
 		{
-			var ipAddress = Dns.GetHostAddresses(channel.EndPoint.Host.Domain).First();
-			var ipEndPoint = new IPEndPoint(ipAddress, channel.EndPoint.Port);
+			if (IPAddress.TryParse(targetEndPoint.Host, out var ipAddress) == false) // Parse or resolve IP
+				ipAddress = (await Dns.GetHostAddressesAsync(targetEndPoint.Host)).First();
 
-			switch (requestedTransportType)
+			var ipEndPoint = new IPEndPoint(ipAddress, channel.EndPoint.Port);
+			var addressFamily = ipAddress.AddressFamily; // Can be IPv4 or IPv6
+
+			switch (targetEndPoint.Protocol)
 			{
 				case TransportType.StreamBased:
 					{
-						var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+						var socket = new Socket(addressFamily, SocketType.Stream, ProtocolType.Tcp);
 						await socket.ConnectAsync(ipEndPoint);
 						var flow = new SocketBasedStreamDataFlow(socket);
 						return new OpenChannel(flow, socket);
 					}
 				case TransportType.DatagramBased:
 					{
-						var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+						var socket = new Socket(addressFamily, SocketType.Dgram, ProtocolType.Udp);
 						var flow = new SocketBasedDatagramDataFlow(socket, ipEndPoint);
 						return new OpenChannel(flow, socket);
 					}
