@@ -1,11 +1,6 @@
 namespace GammaRay.Core.Services;
 
-public sealed class CapabilityClass
+public sealed class CapabilityClass(IReadOnlyCollection<CapabilityDetectionRule> detectionRules)
 {
-	// TODO: add functional members
-
-	public CapabilityClass()
-	{
-
-	}
+	public IReadOnlyCollection<CapabilityDetectionRule> DetectionRules { get; } = detectionRules;
 }
