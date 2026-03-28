@@ -1,36 +1,65 @@
-using GammaRay.Core;
 using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
+using GammaRay.Core.Network;
+using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
+using GammaRay.Core.Services.Probing;
+using GammaRay.Core.Services.Probing.Drivers;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils;
 using GammaRay.Core.Utils.FileSystem;
 using Microsoft.Extensions.Options;
 using Serilog;
-using System.Net;
 
 internal class Program
 {
-	private static void Main(string[] args)
+	private async static Task Main(string[] args)
 	{
 		Log.Logger = new LoggerConfiguration()
 			.WriteTo.Console()
 			.CreateLogger();
 
-		LoadSettings("settings.yaml");
+		//LoadSettings("settings.yaml");
 
-		var httpInboundDriver = new HTTPInboundDriver(Options.Create(new HTTPInboundDriver.Options { }));
-		var inbound = httpInboundDriver.CreateInbound(new IPEndPoint(new IPAddress([127, 0, 0, 3]), 2000));
+		Console.Write("Enter end point: ");
+		var endPoint = WebEndPoint.Parse(Console.ReadLine()!, 443, TransportType.StreamBased);
 
 		var channelRegistry = new ReflectionBasedDriverRegistry<IChannelDriver>([new LocalChannelDriver()]);
+		var probeDriverRegistry = new ReflectionBasedDriverRegistry<IProbeDriver>([new HTTPProbingDriver()]);
+		var netId = new InterfaceBasedNetworkIdentifier();
 
-		var masterServer = new MasterServer([inbound], new DummyRouter(), channelRegistry);
+		var multiProber = new ProbingManager(
+			probeDriverRegistry,
+			new DummyStatusRepository(),
+			channelRegistry,
+			netId,
+			new DummyNetProfileMapping(),
+			Options.Create(new ProbingManager.Options())
+		);
 
-		masterServer.Run();
+		var IAP = new InternetAccessPoint("local-main") { Channels = new Dictionary<string, IAPChannel> { { "main", new IAPChannel("local", default) } } };
+
+		var capabilityProbingMethod = new CapabilityProbingMethod("HTTP", new Dictionary<string, CapabilityLinkedValue>()
+			{ { "useTLS", CapabilityLinkedValue.Property("UseTLS") } });
+		var capabilityClass = new CapabilityClass([], capabilityProbingMethod);
+		var capability = new Capability(capabilityClass, new Dictionary<string, string>()
+			{ { "UseTLS", "true" } });
+		var service = new Service(endPoint, capability);
+
+		var output = new DummyServiceStatusTableOutput();
+
+		multiProber.StartProbing(service, [IAP], output);
+
+		var table = await output.AwaitForUpdate();
+		var status = table.Table[IAP];
+
+		if (status.IsUnavailable)
+			Console.WriteLine("Unavailable");
+		else Console.WriteLine(status.AverageProbeTime.TotalMilliseconds);
 	}
 
 	private static void LoadSettings(string path)
@@ -89,6 +118,41 @@ internal class Program
 			return [
 				new IAPChannel("local", default)
 			];
+		}
+	}
+
+	private class DummyStatusRepository : IIAPChannelStatusRepository
+	{
+		public IAPChannelStatus GetStatus(InternetAccessPoint point, IAPChannel channel, NetworkProfile currentNetworkProfile)
+		{
+			return new IAPChannelStatus(point, channel, currentNetworkProfile, TimeSpan.FromMilliseconds(15));
+		}
+	}
+
+	public class DummyNetProfileMapping : INetworkProfileMappingRepository
+	{
+		private readonly static NetworkProfile MainProfile = new("main");
+
+		public NetworkProfile GetProfileFor(NetworkIdentity identity) => MainProfile;
+	}
+
+	public class DummyServiceStatusTableOutput : IServiceStatusTableRepository
+	{
+		private readonly TaskCompletionSource<ServiceStatusTable> _e = new(false);
+
+		public Decayable<ServiceStatusTable>? TryGetTable(Service service)
+		{
+			return null;
+		}
+
+		public void UpdateTable(ServiceStatusTable route)
+		{
+			_e.SetResult(route);	
+		}
+
+		public Task<ServiceStatusTable> AwaitForUpdate()
+		{
+			return _e.Task;
 		}
 	}
 

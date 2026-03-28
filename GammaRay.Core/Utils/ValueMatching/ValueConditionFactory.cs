@@ -92,7 +92,9 @@ public static class ValueConditionFactory
 		private static Func<ReadOnlySpan<char>, Func<ReadOnlySpan<char>, TValue>, ValueCondition<TValue>?> CreateParseNumeric()
 		{
 			var isNumeric = typeof(TValue).GetInterfaces().Any(@interface =>
-				@interface.GetGenericTypeDefinition() == typeof(INumber<>) && @interface.GetGenericArguments().SequenceEqual([typeof(TValue)])
+				@interface.IsGenericType &&
+				@interface.GetGenericTypeDefinition() == typeof(INumber<>) &&
+				@interface.GetGenericArguments().SequenceEqual([typeof(TValue)])
 			);
 
 			if (isNumeric)

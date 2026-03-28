@@ -1,6 +1,7 @@
-using GammaRay.Core.Network.Flow;
+using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow.Implementation;
 using GammaRay.Core.Protocols.HTTP;
+using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
 using Serilog;
 using System.Net;
@@ -97,10 +98,16 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 					if (rawHeader.Length == 0)
 						return;
 					var header = HttpRequestHeader.Parse(rawHeader);
+					var destinationEndPoint = header.Uri.EndPoint;
+					destinationEndPoint ??= GenericWebEndPoint.Parse(header.Headers.TryGetSingle("Host")
+						?? throw new Exception("Client do not specified destination host"));
 
 					// -- Create request context
 					var requestType = header.Method == "CONNECT" ? HttpProxyRequestType.Connect : HttpProxyRequestType.HTTP;
-					var requestContext = new RequestContext(header.Uri.EndPoint, FormIncomingDataFlow(clientContext, requestType));
+					var requestContext = new RequestContext(
+						new WebEndPoint(destinationEndPoint.Value, TransportType.StreamBased),
+						FormIncomingDataFlow(clientContext, requestType)
+					);
 
 					// -- Write response
 					await clientContext.Stream.WriteAsync(ConnectionEstablishedMessage);

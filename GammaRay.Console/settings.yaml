@@ -26,7 +26,7 @@ internetAccessPoints:
 capabilityClasses:
   HTTPS:
     detectionRules:
-      - transport: tcp # TransportType .Transport [tcp -> StreamBased, udp -> DatagramBased]
+      - transport: StreamBased # TransportType .Transport [tcp -> StreamBased, udp -> DatagramBased]
         port: 443 # int .Port
         preread: # CapabilityDetectionRulePrereadConfiguration? .Preread
           protocol: tls # string .Protocol
@@ -35,6 +35,14 @@ capabilityClasses:
             # string format: "[ParameterName]: [Option1]=[Value1] [Option2]=[Value2]"
             # saveAs (string? .SaveAs): property name or null, Name for capability parameter or null if no property required
             # allowedValues (string[] .AllowedValues): format: ['value1', 'value2', 'value3'], List of allowed values for parameter,			
+    probingMethod:
+      driver: HTTP
+      parameters:
+        useTLS: true
+        path: /
+        userAgent: .ReadUserAgent
+        method: .ReadMethod
+      
 
 endpointRoutingConfigurations:
   sniFake: # EndpointRoutingConfiguration
@@ -56,6 +64,6 @@ endPointCategories:
 routingGrid:
   profilesOrder: [ main, second ]
   grid:
-    blocked: [ proxy, proxy ]
-    local: [ forceDirect", sni-fake ]
-    default: [ speed, sni-fake ]
+    blocked: [ sniFake, sniFake ]
+    local: [ sniFake, sniFake ]
+    default: [ sniFake, sniFake ]

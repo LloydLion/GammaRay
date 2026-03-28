@@ -1,10 +1,16 @@
+using GammaRay.Core.Utils;
 using System.Net.Sockets;
 
 namespace GammaRay.Core.Network.Flow.Implementation;
 
-public sealed class SocketBasedStreamDataFlow : IStreamDataFlow
+public sealed class SocketBasedStreamDataFlow : IStreamDataFlow, IDisposable
 {
 	private readonly Socket _underlyingSocket;
+
+	private readonly TimeoutHandle _readTimeout;
+	private readonly TimeoutHandle _writeTimeout;
+
+	private TimeSpan _currentReceiveTimeout = new DataFlowReadingOptions().Timeout;
 
 
 	public SocketBasedStreamDataFlow(Socket underlyingSocket)
@@ -13,24 +19,37 @@ public sealed class SocketBasedStreamDataFlow : IStreamDataFlow
 			throw new ArgumentException($"Invalid socket type. Use socket of Stream type. Actual: {underlyingSocket.SocketType}", nameof(underlyingSocket));
 
 		_underlyingSocket = underlyingSocket;
+
+		_readTimeout = new(TimeProvider.System);
+		_writeTimeout = new(TimeProvider.System);
+
+		_underlyingSocket.SetReceiveTimeout(_currentReceiveTimeout);
 	}
 
 
-	public int DataAvailable => _underlyingSocket.Available;
-
-
-	public async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+	public ValueTask<int> ReadAsync(Memory<byte> buffer, DataFlowReadingOptions readingOptions, CancellationToken cancellationToken)
 	{
-		return await _underlyingSocket.ReceiveAsync(buffer, cancellationToken);
+		DataFlowReadingOptions.InitializeWithDefaultsIfNeed(ref readingOptions);
+		return _readTimeout.DoAsyncOperationWithTimeout(readingOptions.Timeout, buffer, _underlyingSocket.ReceiveAsync, cancellationToken);
 	}
 
-	public async ValueTask<int> WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
+	public ValueTask<int> WriteAsync(ReadOnlyMemory<byte> buffer, DataFlowWritingOptions writingOptions, CancellationToken cancellationToken)
 	{
-		return await _underlyingSocket.SendAsync(buffer, cancellationToken);
+		DataFlowWritingOptions.InitializeWithDefaultsIfNeed(ref writingOptions);
+		return _writeTimeout.DoAsyncOperationWithTimeout(writingOptions.Timeout, buffer, _underlyingSocket.SendAsync, cancellationToken);
 	}
 
-	public void Read(Span<byte> buffer)
+	public int Read(Span<byte> buffer, DataFlowReadingOptions readingOptions)
 	{
-		_underlyingSocket.Receive(buffer);
+		DataFlowReadingOptions.InitializeWithDefaultsIfNeed(ref readingOptions);
+		if (readingOptions.Timeout != _currentReceiveTimeout)
+			_underlyingSocket.SetReceiveTimeout(_currentReceiveTimeout = readingOptions.Timeout);
+		return _underlyingSocket.Receive(buffer);
+	}
+
+	public void Dispose()
+	{
+		_readTimeout.Dispose();
+		_writeTimeout.Dispose();
 	}
 }

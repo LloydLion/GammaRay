@@ -1,19 +1,20 @@
 using GammaRay.Core.Network;
 using GammaRay.Core.Services;
+using GammaRay.Core.Services.Probing;
 using GammaRay.Core.Utils.ValueMatching;
 using YamlDotNet.RepresentationModel;
 
 namespace GammaRay.Core.Settings;
 
-public class YAMLCapabilityClassRawProvider : IRawSettingsProvider<IReadOnlyDictionary<string, CapabilityClass>>
+public class YAMLCapabilityClassRawProvider : IRawSettingsProvider<IReadOnlyList<KeyValuePair<string, CapabilityClass>>>
 {
-	private IReadOnlyDictionary<string, CapabilityClass>? _capabilityClasses;
+	private IReadOnlyList<KeyValuePair<string, CapabilityClass>>? _capabilityClasses;
 
 
 	public bool IsInitialized => _capabilityClasses is not null;
 
 
-	public IReadOnlyDictionary<string, CapabilityClass> Get()
+	public IReadOnlyList<KeyValuePair<string, CapabilityClass>> Get()
 	{
 		return _capabilityClasses ?? throw new InvalidOperationException("Not initialized");
 	}
@@ -23,7 +24,7 @@ public class YAMLCapabilityClassRawProvider : IRawSettingsProvider<IReadOnlyDict
 		_capabilityClasses = LoadCapabilityClasses(YAMLLoader.GetFragment("capabilityClasses"));
 	}
 
-	private static Dictionary<string, CapabilityClass> LoadCapabilityClasses(YamlMappingNode node) =>
+	private static KeyValuePair<string, CapabilityClass>[] LoadCapabilityClasses(YamlMappingNode node) =>
 		node.ScalarChildrenMap.Select(kv =>
 		{
 			var node = kv.Value.AsMapping();
@@ -39,8 +40,20 @@ public class YAMLCapabilityClassRawProvider : IRawSettingsProvider<IReadOnlyDict
 				return new CapabilityDetectionRule() { Port = portCondition, Transport = transportCondition };
 			}).ToArray();
 
-			var capabilityClass = new CapabilityClass(detectionRules);
+			var probingMethodNode = node.ExceptMappingChild("probingMethod");
+			var probingMethodDriver = probingMethodNode["driver"].Bind<string>();
+			var probingMethodParameters = probingMethodNode.ExceptMappingChild("parameters").ScalarChildrenMap
+				.Select(kv =>
+				{
+					var rawParameter = kv.Value.Bind<string>();
+					if (rawParameter.StartsWith('.'))
+						return KeyValuePair.Create(kv.Key, CapabilityLinkedValue.Property(rawParameter[1..]));
+					return KeyValuePair.Create(kv.Key, CapabilityLinkedValue.Constant(rawParameter));
+				}).ToDictionary();
+			var probingMethod = new CapabilityProbingMethod(probingMethodDriver, probingMethodParameters);
+
+			var capabilityClass = new CapabilityClass(detectionRules, probingMethod);
 
 			return KeyValuePair.Create(kv.Key, capabilityClass);
-		}).ToDictionary();
+		}).ToArray();
 }

@@ -20,8 +20,8 @@ public sealed class SmartRouter(
 	IServiceRepository _serviceRepository,
 	ICapabilityDetector _capabilityDetector,
 
-	IServiceRouteRepository _routeRepository,
-	IProber _prober,
+	IServiceStatusTableRepository _routeRepository,
+	IProbingManager _prober,
 
 	IIAPChannelStatusRepository _channelStatusRepository
 ) : IRouter
@@ -36,20 +36,22 @@ public sealed class SmartRouter(
 		var routingConfiguration = _routingGridResolver.GetConfiguration(networkProfile, endPointCategory);
 
 
-		var service = _serviceRepository.TryGetService(context.TargetEndPoint);
-		if (service is null || service.ValidUntil <= context.InitialTime)
+		var serviceDecay = _serviceRepository.TryGetService(context.TargetEndPoint);
+		Service service;
+		if (serviceDecay is null || serviceDecay.Value.ValidUntil <= context.InitialTime)
 		{
 			var capability = _capabilityDetector.Detect(context);
-			service = new Service(context.TargetEndPoint, capability, context.InitialTime.AddDays(2));
+			service = new Service(context.TargetEndPoint, capability);
 			_serviceRepository.RegisterService(service);
 		}
+		else service = serviceDecay.Value.Value;
 
 
-		var route = _routeRepository.TryGetRoute(service);
-		if (route is null || route.ValidUntil <= context.InitialTime)
-			_prober.StartProbing(service, routingConfiguration.GetExtendedIAPChain(_internetAccessPointProvider), _routeRepository);
+		var routeDec = _routeRepository.TryGetTable(service);
+		if (routeDec is null || routeDec.Value.ValidUntil <= context.InitialTime)
+			_prober.StartProbing(service, routingConfiguration.GetExtendedIAPChain(_internetAccessPointProvider).PlainListOfPoints, _routeRepository);
 
-		var chain = route is not null ? route.Chain : routingConfiguration.DefaultIAPChain;
+		var chain = routeDec is not null ? BuildChainFromRoute(routeDec.Value.Value) : routingConfiguration.DefaultIAPChain;
 
 		var result = chain.Blobs.SelectMany(blob =>
 			blob.Points.SelectMany(iap =>
@@ -57,11 +59,18 @@ public sealed class SmartRouter(
 					.Select(channel => _channelStatusRepository.GetStatus(iap, channel, networkProfile))
 					.Where(s => s.IsAvailable)
 			)
-			.OrderBy(status => status.Metric)
+			.OrderBy(status => status.AverageAccessTime)
 			.Select(status => status.Channel)
 		).ToArray();
 
 
 		return result;
+	}
+
+	private InternetAccessPointChain BuildChainFromRoute(ServiceStatusTable route)
+	{
+		return new(
+			route.Table.OrderBy(kv => kv.Value.AverageProbeTime).Select(kv => new InternetAccessPointBlob([kv.Key])).ToArray()
+		);
 	}
 }

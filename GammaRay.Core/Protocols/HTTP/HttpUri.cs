@@ -3,17 +3,18 @@ using System.Text;
 
 namespace GammaRay.Core.Protocols.HTTP;
 
-public record HttpUri(string? Schema, WebEndPoint EndPoint, string? Path, string? Query)
+public record HttpUri(string? Schema, GenericWebEndPoint? EndPoint, string? Path, string? Query)
 {
 	public override string ToString()
 	{
 		var sb = new StringBuilder();
-		if (Schema != null)
+		if (Schema is not null)
 			sb.Append(Schema).Append("://");
-		sb.Append(EndPoint.ToString());
-		if (Path != null)
+		if (EndPoint is not null)
+			sb.Append(EndPoint.ToString());
+		if (Path is not null)
 			sb.Append('/').Append(Path);
-		if (Query != null)
+		if (Query is not null)
 			sb.Append('?').Append(Query);
 		return sb.ToString();
 	}
@@ -55,6 +56,6 @@ public record HttpUri(string? Schema, WebEndPoint EndPoint, string? Path, string
 				query = queryParts[1];
 		}
 
-		return new HttpUri(schema, new WebEndPoint(new WebHost(endpointParts[0]), port, TransportType.StreamBased), path, query);
+		return new HttpUri(schema, new GenericWebEndPoint(new WebHost(endpointParts[0]), port), path, query);
 	}
 }

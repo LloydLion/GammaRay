@@ -17,7 +17,7 @@ public sealed class LocalChannelDriver : IChannelDriver
 			if (IPAddress.TryParse(targetEndPoint.Host, out var ipAddress) == false) // Parse or resolve IP
 				ipAddress = (await Dns.GetHostAddressesAsync(targetEndPoint.Host)).First();
 
-			var ipEndPoint = new IPEndPoint(ipAddress, channel.EndPoint.Port);
+			var ipEndPoint = new IPEndPoint(ipAddress, targetEndPoint.Port);
 			var addressFamily = ipAddress.AddressFamily; // Can be IPv4 or IPv6
 
 			switch (targetEndPoint.Protocol)

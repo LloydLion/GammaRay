@@ -1,13 +1,18 @@
 
+using GammaRay.Core.Utils;
+using Serilog.Debugging;
 using System.Net;
 using System.Net.Sockets;
 
 namespace GammaRay.Core.Network.Flow.Implementation;
 
-public sealed class SocketBasedDatagramDataFlow : IDatagramDataFlow
+public sealed class SocketBasedDatagramDataFlow : IDatagramDataFlow, IDisposable
 {
 	private readonly Socket _underlyingSocket;
 	private readonly EndPoint _remoteEndPoint;
+
+	private readonly TimeoutHandle _readTimeout;
+	private readonly TimeoutHandle _writeTimeout;
 
 
 	public SocketBasedDatagramDataFlow(Socket underlyingSocket, EndPoint remoteEndPoint)
@@ -17,20 +22,37 @@ public sealed class SocketBasedDatagramDataFlow : IDatagramDataFlow
 
 		_underlyingSocket = underlyingSocket;
 		_remoteEndPoint = remoteEndPoint;
+
+		_readTimeout = new(TimeProvider.System);
+		_writeTimeout = new(TimeProvider.System);
 	}
 
-
-	public async ValueTask<int> ReadDatagramAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+	public void Dispose()
 	{
-	tryAgain:
-		var result = await _underlyingSocket.ReceiveFromAsync(buffer, SocketFlags.None, _remoteEndPoint, cancellationToken);
-		if (result.RemoteEndPoint.Equals(_remoteEndPoint) == false)
-			goto tryAgain;
-		return result.ReceivedBytes;
+		_readTimeout.Dispose();
+		_writeTimeout.Dispose();
 	}
 
-	public async ValueTask<int> WriteDatagramAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
+	public ValueTask<int> ReadDatagramAsync(Memory<byte> buffer, DataFlowReadingOptions readingOptions, CancellationToken cancellationToken)
 	{
-		return await _underlyingSocket.SendToAsync(buffer, _remoteEndPoint, cancellationToken);
+		DataFlowReadingOptions.InitializeWithDefaultsIfNeed(ref readingOptions);
+		return _readTimeout.DoAsyncOperationWithTimeout(readingOptions.Timeout, (buffer, self: this), async static (a, cancellationToken) =>
+		{
+		nextReceive:
+			var result = await a.self._underlyingSocket.ReceiveFromAsync(a.buffer, SocketFlags.None, a.self._remoteEndPoint, cancellationToken);
+			if (result.RemoteEndPoint.Equals(a.self._remoteEndPoint) == false)
+				goto nextReceive;
+			return result.ReceivedBytes;
+		}, cancellationToken);
+	}
+
+	public ValueTask<int> WriteDatagramAsync(ReadOnlyMemory<byte> buffer, DataFlowWritingOptions writingOptions, CancellationToken cancellationToken)
+	{
+		DataFlowWritingOptions.InitializeWithDefaultsIfNeed(ref writingOptions);
+		return _writeTimeout.DoAsyncOperationWithTimeout(
+			writingOptions.Timeout, (buffer, self: this),
+			async static (a, cancellationToken) => await a.self._underlyingSocket.SendToAsync(a.buffer, a.self._remoteEndPoint, cancellationToken),
+			cancellationToken
+		);
 	}
 }

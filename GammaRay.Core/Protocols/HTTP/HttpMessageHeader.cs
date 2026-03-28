@@ -1,3 +1,4 @@
+using GammaRay.Core.Network.Flow;
 using System.Text;
 
 namespace GammaRay.Core.Protocols.HTTP;
@@ -52,13 +53,18 @@ public abstract class HttpMessageHeader(Version version, HttpHeadersCollection h
 
 	public abstract string Serialize();
 
-	public static string[] ReadRawHeader(Stream stream)
+	public static string[] ReadRawHeader(Stream stream) => ReadRawHeader(stream.ReadByte);
+
+	public static string[] ReadRawHeader(IReadOnlyStreamDataFlow stream, DataFlowReadingOptions readingOptions = default) =>
+		ReadRawHeader(() => stream.ReadByte(readingOptions));
+
+	public static string[] ReadRawHeader(Func<int> syncByteReader)
 	{
 		var ms = new MemoryStream();
 
 		while (true)
 		{
-			var readByte = stream.ReadByte();
+			var readByte = syncByteReader();
 
 			if (readByte == -1)
 				break;

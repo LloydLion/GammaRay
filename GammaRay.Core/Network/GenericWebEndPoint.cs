@@ -7,6 +7,13 @@ public readonly record struct GenericWebEndPoint(WebHost Host, int Port)
 		return $"{Host}:{Port}";
 	}
 
+	public string ToString(int defaultPort)
+	{
+		if (Port == defaultPort)
+			return Host.ToString();
+		return $"{Host}:{Port}";
+	}
+
 	public static GenericWebEndPoint Parse(string value, int defaultPort)
 	{
 		var idx = value.IndexOf(':');
