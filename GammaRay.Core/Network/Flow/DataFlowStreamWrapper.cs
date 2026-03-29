@@ -1,10 +1,10 @@
+using GammaRay.Core.Utils;
+
 namespace GammaRay.Core.Network.Flow;
 
 public sealed class DataFlowStreamWrapper : Stream
 {
 	private readonly IStreamDataFlow _dataFlow;
-	private int _readTimeout = (int)DataFlowReadingOptions.DefaultTimeout.TotalMilliseconds;
-	private int _writeTimeout = (int)DataFlowWritingOptions.DefaultTimeout.TotalMilliseconds;
 
 
 	public DataFlowStreamWrapper(IStreamDataFlow dataFlow)
@@ -29,9 +29,21 @@ public sealed class DataFlowStreamWrapper : Stream
 		set => throw new NotSupportedException();
 	}
 
-	public override int ReadTimeout { get => _readTimeout; set => _readTimeout = value; }
+	public override int ReadTimeout
+	{
+		get => ReadingOptions.Timeout.TotalMillisecondsInt;
+		set => ReadingOptions = ReadingOptions with { Timeout = TimeSpan.FromMilliseconds(value) };
+	}
 
-	public override int WriteTimeout { get => _writeTimeout; set => _writeTimeout = value; }
+	public override int WriteTimeout
+	{
+		get => WritingOptions.Timeout.TotalMillisecondsInt;
+		set => WritingOptions = WritingOptions with { Timeout = TimeSpan.FromMilliseconds(value) };
+	}
+
+	public DataFlowReadingOptions ReadingOptions { get; set; }
+
+	public DataFlowWritingOptions WritingOptions { get; set; }
 
 
 	public override void Flush() { }
@@ -61,9 +73,4 @@ public sealed class DataFlowStreamWrapper : Stream
 
 	public override void SetLength(long value)
 		=> throw new NotSupportedException();
-
-
-	private DataFlowReadingOptions ReadingOptions => new() { Timeout = TimeSpan.FromMilliseconds(_readTimeout) };
-
-	private DataFlowWritingOptions WritingOptions => new() { Timeout = TimeSpan.FromMilliseconds(_readTimeout) };
 }

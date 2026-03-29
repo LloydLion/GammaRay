@@ -10,6 +10,8 @@ public readonly record struct DataFlowReadingOptions
 
 	public TimeSpan Timeout { get; init; } = DefaultTimeout;
 
+	public bool PeekOnly { get; init; } = false;
+
 
 	public static void InitializeWithDefaultsIfNeed(ref DataFlowReadingOptions options)
 	{

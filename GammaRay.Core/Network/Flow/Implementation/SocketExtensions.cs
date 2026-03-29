@@ -1,3 +1,4 @@
+using GammaRay.Core.Utils;
 using System.Net.Sockets;
 
 namespace GammaRay.Core.Network.Flow.Implementation;
@@ -14,7 +15,7 @@ public static class SocketExtensions
 				return;
 			}
 
-			var timeoutMs = (int)time.TotalMilliseconds;
+			var timeoutMs = time.TotalMillisecondsInt;
 			if (timeoutMs == 0 && time != TimeSpan.Zero)
 				timeoutMs = 1;
 			socket.ReceiveTimeout = timeoutMs;

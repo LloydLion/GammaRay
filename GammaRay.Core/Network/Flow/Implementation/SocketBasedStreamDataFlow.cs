@@ -30,7 +30,13 @@ public sealed class SocketBasedStreamDataFlow : IStreamDataFlow, IDisposable
 	public ValueTask<int> ReadAsync(Memory<byte> buffer, DataFlowReadingOptions readingOptions, CancellationToken cancellationToken)
 	{
 		DataFlowReadingOptions.InitializeWithDefaultsIfNeed(ref readingOptions);
-		return _readTimeout.DoAsyncOperationWithTimeout(readingOptions.Timeout, buffer, _underlyingSocket.ReceiveAsync, cancellationToken);
+		return _readTimeout.DoAsyncOperationWithTimeout(
+			readingOptions.Timeout,
+			(buffer, readingOptions, self: this),
+			static (a, cancellationToken) =>
+				a.self._underlyingSocket.ReceiveAsync(a.buffer, CreateSocketFlagsForReading(a.readingOptions), cancellationToken),
+			cancellationToken
+		);
 	}
 
 	public ValueTask<int> WriteAsync(ReadOnlyMemory<byte> buffer, DataFlowWritingOptions writingOptions, CancellationToken cancellationToken)
@@ -44,12 +50,17 @@ public sealed class SocketBasedStreamDataFlow : IStreamDataFlow, IDisposable
 		DataFlowReadingOptions.InitializeWithDefaultsIfNeed(ref readingOptions);
 		if (readingOptions.Timeout != _currentReceiveTimeout)
 			_underlyingSocket.SetReceiveTimeout(_currentReceiveTimeout = readingOptions.Timeout);
-		return _underlyingSocket.Receive(buffer);
+		return _underlyingSocket.Receive(buffer, CreateSocketFlagsForReading(readingOptions));
 	}
 
 	public void Dispose()
 	{
 		_readTimeout.Dispose();
 		_writeTimeout.Dispose();
+	}
+
+	private static SocketFlags CreateSocketFlagsForReading(DataFlowReadingOptions readingOptions)
+	{
+		return readingOptions.PeekOnly ? SocketFlags.Peek : SocketFlags.None;
 	}
 }

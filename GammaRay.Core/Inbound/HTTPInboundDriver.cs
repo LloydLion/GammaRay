@@ -168,7 +168,7 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 		private ProxyClientContext ConfigureIncomingClient(Socket clientSocket)
 		{
 			var clientContext = new ProxyClientContext(clientSocket, _logger);
-			clientContext.Stream.WriteTimeout = clientContext.Stream.ReadTimeout = (int)_options.MasterClientTimeout.TotalMilliseconds;
+			clientContext.Stream.WriteTimeout = clientContext.Stream.ReadTimeout = _options.MasterClientTimeout.TotalMillisecondsInt;
 			return clientContext;
 		}
 

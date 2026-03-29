@@ -1,3 +1,4 @@
+using GammaRay.Core;
 using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
@@ -14,6 +15,7 @@ using GammaRay.Core.Utils;
 using GammaRay.Core.Utils.FileSystem;
 using Microsoft.Extensions.Options;
 using Serilog;
+using System.Net;
 
 internal class Program
 {
@@ -23,43 +25,16 @@ internal class Program
 			.WriteTo.Console()
 			.CreateLogger();
 
-		//LoadSettings("settings.yaml");
+		LoadSettings("settings.yaml");
 
-		Console.Write("Enter end point: ");
-		var endPoint = WebEndPoint.Parse(Console.ReadLine()!, 443, TransportType.StreamBased);
+		var httpInboundDriver = new HTTPInboundDriver(Options.Create(new HTTPInboundDriver.Options { }));
+		var inbound = httpInboundDriver.CreateInbound(new IPEndPoint(new IPAddress([127, 0, 0, 3]), 2000));
 
 		var channelRegistry = new ReflectionBasedDriverRegistry<IChannelDriver>([new LocalChannelDriver()]);
-		var probeDriverRegistry = new ReflectionBasedDriverRegistry<IProbeDriver>([new HTTPProbingDriver()]);
-		var netId = new InterfaceBasedNetworkIdentifier();
 
-		var multiProber = new ProbingManager(
-			probeDriverRegistry,
-			new DummyStatusRepository(),
-			channelRegistry,
-			netId,
-			new DummyNetProfileMapping(),
-			Options.Create(new ProbingManager.Options())
-		);
+		var masterServer = new MasterServer([inbound], new DummyRouter(), channelRegistry);
 
-		var IAP = new InternetAccessPoint("local-main") { Channels = new Dictionary<string, IAPChannel> { { "main", new IAPChannel("local", default) } } };
-
-		var capabilityProbingMethod = new CapabilityProbingMethod("HTTP", new Dictionary<string, CapabilityLinkedValue>()
-			{ { "useTLS", CapabilityLinkedValue.Property("UseTLS") } });
-		var capabilityClass = new CapabilityClass([], capabilityProbingMethod);
-		var capability = new Capability(capabilityClass, new Dictionary<string, string>()
-			{ { "UseTLS", "true" } });
-		var service = new Service(endPoint, capability);
-
-		var output = new DummyServiceStatusTableOutput();
-
-		multiProber.StartProbing(service, [IAP], output);
-
-		var table = await output.AwaitForUpdate();
-		var status = table.Table[IAP];
-
-		if (status.IsUnavailable)
-			Console.WriteLine("Unavailable");
-		else Console.WriteLine(status.AverageProbeTime.TotalMilliseconds);
+		masterServer.Run();
 	}
 
 	private static void LoadSettings(string path)
