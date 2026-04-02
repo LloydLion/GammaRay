@@ -22,8 +22,9 @@ public sealed class InternetAccessPointProvider
 		RemoteInternetAccessPoints = rawPoints.ToDictionary(s => s.Name);
 		PlainRemoteInternetAccessPoints = rawPoints.ToArray();
 
-		PlainLocalInternetAccessPoints = networkProfiles.PlainProfiles.Select(createLocalIAP).ToArray();
-		LocalInternetAccessPoints = PlainLocalInternetAccessPoints.ToDictionary(s => s.Name);
+		LocalInternetAccessPointsByProfile = networkProfiles.PlainProfiles.ToDictionary(s => s, createLocalIAP);
+		LocalInternetAccessPointsByName = LocalInternetAccessPointsByProfile.ToDictionary(kv => kv.Key.Name, kv => kv.Value);
+		PlainLocalInternetAccessPoints = LocalInternetAccessPointsByProfile.Values.ToArray();
 
 		PlainInternetAccessPoints = PlainRemoteInternetAccessPoints.Concat(PlainLocalInternetAccessPoints).ToArray();
 		InternetAccessPoints = PlainInternetAccessPoints.ToDictionary(s => s.Name);
@@ -44,7 +45,9 @@ public sealed class InternetAccessPointProvider
 
 	public IReadOnlyCollection<InternetAccessPoint> PlainLocalInternetAccessPoints { get; }
 
-	public IReadOnlyDictionary<string, InternetAccessPoint> LocalInternetAccessPoints { get; }
+	public IReadOnlyDictionary<string, InternetAccessPoint> LocalInternetAccessPointsByName { get; }
+
+	public IReadOnlyDictionary<NetworkProfile, InternetAccessPoint> LocalInternetAccessPointsByProfile { get; }
 
 	public IReadOnlyCollection<InternetAccessPoint> PlainRemoteInternetAccessPoints { get; }
 

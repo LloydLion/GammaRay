@@ -6,6 +6,7 @@ using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using GammaRay.Core.Services.Probing;
+using GammaRay.Core.Utils;
 
 namespace GammaRay.Core.Routing;
 
@@ -23,7 +24,7 @@ public sealed class SmartRouter(
 	IServiceStatusTableRepository _routeRepository,
 	IProbingManager _prober,
 
-	IIAPChannelStatusRepository _channelStatusRepository
+	IIAPChannelPicker _channelPicker
 ) : IRouter
 {
 	public IReadOnlyList<IAPChannel> MakeRoutingDecision(RequestContext context)
@@ -53,14 +54,14 @@ public sealed class SmartRouter(
 
 		var chain = routeDec is not null ? BuildChainFromRoute(routeDec.Value.Value) : routingConfiguration.DefaultIAPChain;
 
+		var channelRequirements = new IAPChannelRequirements() { RequiredTags = routingConfiguration.RequiredTags };
 		var result = chain.Blobs.SelectMany(blob =>
-			blob.Points.SelectMany(iap =>
-				iap.Channels.Values
-					.Select(channel => _channelStatusRepository.GetStatus(iap, channel, networkProfile))
-					.Where(s => s.IsAvailable)
-			)
-			.OrderBy(status => status.AverageAccessTime)
-			.Select(status => status.Channel)
+			blob.Points
+				.Select(iap => _channelPicker.PickBestChannel(iap, networkProfile, channelRequirements))
+				.WhereNotNull()
+				.Where(status => status.IsAvailable)
+				.OrderBy(status => status.AverageAccessTime)
+				.Select(status => status.Channel)
 		).ToArray();
 
 

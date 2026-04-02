@@ -98,9 +98,19 @@ internal class Program
 
 	private class DummyStatusRepository : IIAPChannelStatusRepository
 	{
-		public IAPChannelStatus GetStatus(InternetAccessPoint point, IAPChannel channel, NetworkProfile currentNetworkProfile)
+		public DateTime GetLastStatusUpdateTime(NetworkProfile networkProfile)
+		{
+			return DateTime.UtcNow.AddDays(-1);
+		}
+
+		public IAPChannelStatus TryGetStatus(InternetAccessPoint point, IAPChannel channel, NetworkProfile currentNetworkProfile)
 		{
 			return new IAPChannelStatus(point, channel, currentNetworkProfile, TimeSpan.FromMilliseconds(15));
+		}
+
+		public ValueTask UpdateStatusesAsync(IEnumerable<IAPChannelStatus> statusTable)
+		{
+			return ValueTask.CompletedTask;
 		}
 	}
 

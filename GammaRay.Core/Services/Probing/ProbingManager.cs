@@ -10,7 +10,7 @@ namespace GammaRay.Core.Services.Probing;
 
 public sealed class ProbingManager(
 	IDriverRegistry<IProbeDriver> _probeDriverRegistry,
-	IIAPChannelStatusRepository _channelStatusRepository,
+	IIAPChannelPicker _channelPicker,
 	IChannelDriverRegistry _channelDriverRegistry,
 
 	INetworkIdentifier _networkIdentifier,
@@ -135,10 +135,7 @@ public sealed class ProbingManager(
 		var currentIdentity = _networkIdentifier.CurrentIdentity;
 		var profile = _networkProfileRepository.GetProfileFor(currentIdentity);
 
-		var bestChannelStatus = IAP.Channels.Values
-			.Select(channel => _channelStatusRepository.GetStatus(IAP, channel, profile))
-			.Where(s => s.IsAvailable)
-			.MinBy(s => s.AverageAccessTime);
+		var bestChannelStatus = _channelPicker.PickBestChannel(IAP, profile, new IAPChannelRequirements());
 
 		return bestChannelStatus;
 	}

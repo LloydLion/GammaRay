@@ -15,6 +15,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 
 	private readonly Timer _timer;
 	private readonly ILogger _logger;
+	private readonly HashSet<Subscription> _subscribers = [];
 	private DateTime? _lastRefresh;
 	private NetworkIdentity? _identity;
 	private int _isRefreshing = 0;
@@ -33,6 +34,15 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 	public DateTime LastRefresh { get { InitializeIfNeed(); return _lastRefresh.Value; } }
 
 	public NetworkIdentity CurrentIdentity { get { InitializeIfNeed(); return _identity.Value; } }
+
+
+	public IDisposable SubscribeForChanges(Action<INetworkIdentifier> callback)
+	{
+		var capturedContext = SynchronizationContext.Current ?? new SynchronizationContext();
+		var subscription = new Subscription(this, callback, capturedContext);
+		_subscribers.Add(subscription);
+		return subscription;
+	}
 
 
 	protected abstract NetworkIdentity FetchCurrentNetworkIdentity();
@@ -86,6 +96,9 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 			_identity = FetchCurrentNetworkIdentity();
 			_lastRefresh = DateTime.UtcNow;
 
+			foreach (var subscriber in _subscribers)
+				subscriber.Call();
+
 			_logger.Information("Current network changed to {NetworkIdentity}", _identity.Value.SerializeToString());
 		}
 		catch (Exception ex)
@@ -96,5 +109,26 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 		{
 			_isRefreshing = 0;
 		}
+	}
+
+
+	private class Subscription(
+		NetworkIdentifierBase _owner,
+		Action<INetworkIdentifier> _callback,
+		SynchronizationContext _capturedContext
+
+	) : IDisposable
+	{
+		public void Dispose() => _owner._subscribers.Remove(this);
+
+		public void Call() =>
+			_capturedContext.Send(_ =>
+			{
+				try
+				{
+					_callback(_owner);
+				}
+				catch (Exception) { }
+			}, null);
 	}
 }
