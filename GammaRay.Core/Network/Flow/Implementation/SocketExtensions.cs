@@ -20,5 +20,18 @@ public static class SocketExtensions
 				timeoutMs = 1;
 			socket.ReceiveTimeout = timeoutMs;
 		}
+
+		public async ValueTask ReceiveExactAsync(Memory<byte> destination)
+		{
+			int offset = 0;
+			while (offset < destination.Length)
+			{
+				var segment = destination[offset..];
+				int got = await socket.ReceiveAsync(segment);
+				if (got == 0)
+					throw new SocketException();
+				offset += got;
+			}
+		}
 	}
 }

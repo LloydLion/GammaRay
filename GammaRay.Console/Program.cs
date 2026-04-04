@@ -2,6 +2,7 @@ using GammaRay.Core;
 using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
+using GammaRay.Core.InternetAccess.Channels.Drivers;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing;
@@ -9,7 +10,6 @@ using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using GammaRay.Core.Services.Probing;
-using GammaRay.Core.Services.Probing.Drivers;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils;
 using GammaRay.Core.Utils.FileSystem;
@@ -28,11 +28,17 @@ internal class Program
 		LoadSettings("settings.yaml");
 
 		var httpInboundDriver = new HTTPInboundDriver(Options.Create(new HTTPInboundDriver.Options { }));
-		var inbound = httpInboundDriver.CreateInbound(new IPEndPoint(new IPAddress([127, 0, 0, 3]), 2000));
+		var httpInbound = httpInboundDriver.CreateInbound(new IPEndPoint(new IPAddress([127, 0, 0, 3]), 2000));
 
-		var channelRegistry = new ReflectionBasedDriverRegistry<IChannelDriver>([new LocalChannelDriver()]);
+		var socksInboundDriver = new SOCKS5InboundDriver();
+		var socksInbound = socksInboundDriver.CreateInbound(new IPEndPoint(new IPAddress([127, 0, 0, 3]), 2001));
 
-		var masterServer = new MasterServer([inbound], new DummyRouter(), channelRegistry);
+
+		var channelRegistry = new ReflectionBasedDriverRegistry<IChannelDriver>([new LocalChannelDriver(), new SOCKS5ChannelDriver()]);
+
+		var channel = new IAPChannel("socks", new GenericWebEndPoint(new WebHost("127.0.0.2"), 2011));
+
+		var masterServer = new MasterServer([httpInbound, socksInbound], new DummyRouter(channel), channelRegistry);
 
 		masterServer.Run();
 	}
@@ -86,14 +92,9 @@ internal class Program
 		var routingGridProvider = new RoutingGridProvider(routingGridRawProvider);
 	}
 
-	private class DummyRouter : IRouter
+	private class DummyRouter(IAPChannel _channel) : IRouter
 	{
-		public IReadOnlyList<IAPChannel> MakeRoutingDecision(RequestContext context)
-		{
-			return [
-				new IAPChannel("local", default)
-			];
-		}
+		public IReadOnlyList<IAPChannel> MakeRoutingDecision(RequestContext context) => [_channel];
 	}
 
 	private class DummyStatusRepository : IIAPChannelStatusRepository
