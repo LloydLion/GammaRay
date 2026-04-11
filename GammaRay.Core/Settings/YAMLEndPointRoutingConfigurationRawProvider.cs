@@ -45,7 +45,7 @@ public sealed class YAMLEndPointRoutingConfigurationRawProvider : IRawSettingsPr
 			var IAPChain = new InternetAccessPointChain(rawIAPChain.Select(blob => new InternetAccessPointBlob(blob.SelectMany(iapPattern =>
 			{
 				if (iapPattern.EndsWith('*'))
-					return accessPoints.Where(IAP => IAP.Name.StartsWith(iapPattern));
+					return accessPoints.Where(IAP => IAP.Name.StartsWith(iapPattern.AsSpan()[..^1]));
 				else return [accessPoints.Single(IAP => IAP.Name == iapPattern)];
 			}).ToArray())).ToArray());
 

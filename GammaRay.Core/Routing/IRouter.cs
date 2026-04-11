@@ -5,5 +5,5 @@ namespace GammaRay.Core.Routing;
 
 public interface IRouter
 {
-	public IReadOnlyList<IAPChannel> MakeRoutingDecision(RequestContext context);
+	public IAPChannel MakeRoutingDecision(RequestContext context);
 }

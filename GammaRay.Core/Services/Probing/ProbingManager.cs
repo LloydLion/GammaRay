@@ -27,6 +27,7 @@ public sealed class ProbingManager(
 	{
 		if (_tasks.Any(s => s.Service == service) == false)
 		{
+			Console.WriteLine($"New probing for service on {service.EndPoint} via: {string.Join(", ", pointsToProbeVia.Select(s => s.Name))}");
 			var probingTask = new ProbingTask(service);
 
 			var task = StartProbingTask(service, pointsToProbeVia, routeOutput, () => _tasks.Remove(probingTask));
@@ -34,10 +35,16 @@ public sealed class ProbingManager(
 
 			_tasks.Add(probingTask);
 		}
+		else
+		{
+			Console.WriteLine($"Probing for service on {service.EndPoint} already running");
+		}
 	}
 
 	private async Task StartProbingTask(Service service, IReadOnlyCollection<InternetAccessPoint> pointsToProbeVia, IServiceStatusTableRepository routeOutput, Action callback)
 	{
+		await Task.Yield();
+
 		try
 		{
 			var probingMethod = service.Capability.Class.ProbingMethod;
@@ -65,13 +72,16 @@ public sealed class ProbingManager(
 
 				// Subtract channel access time
 				var status = rawStatus.Value.Match(channelStatus.AverageAccessTime, (AAT, raw) =>
-					new ServiceIAPStatus(Math.Clamp(raw.AverageProbeTime, AAT, TimeSpan.MaxValue)));
+					new ServiceIAPStatus(Math.Clamp(raw.AverageProbeTime - AAT, TimeSpan.Zero, TimeSpan.MaxValue)));
 
 				rawStatusTable.Add(IAP, status);
 			}
 
 
 			var statusTable = new ServiceStatusTable(service, rawStatusTable);
+
+			Console.WriteLine($"Probing for service on {service.EndPoint} completed with results:\n" +
+				$"\t{string.Join(", ", rawStatusTable.Select(kv => $"{kv.Key.Name}={(kv.Value.IsAvailable ? kv.Value.AverageProbeTime.TotalMilliseconds.ToString() : "INF")}ms"))}");
 
 			routeOutput.UpdateTable(statusTable);
 		}

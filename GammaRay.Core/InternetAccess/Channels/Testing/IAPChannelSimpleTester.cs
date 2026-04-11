@@ -64,16 +64,8 @@ public sealed class IAPChannelSimpleTester(
 
 				var rawResponse = HttpMessageHeader.ReadRawHeader(dataFlow, new DataFlowReadingOptions());
 				var response = HttpResponseHeader.Parse(rawResponse);
-				if (response.Code / 100 != 2)
+				if (response.Code != 204)
 					return new(_time.GetElapsedTime(start), TestStatus.UnexceptedData);
-
-				var buffer = new byte[1024];
-				while (true)
-				{
-					var read = await dataFlow.ReadAsync(buffer, new DataFlowReadingOptions(), cancellationToken);
-					if (read == 0)
-						break;
-				}
 			}
 
 			return new(_time.GetElapsedTime(start), TestStatus.Success);
@@ -87,7 +79,7 @@ public sealed class IAPChannelSimpleTester(
 
 	public class Options
 	{
-		public string TestUri { get; init; } = "https://www.gstatic.com/generate_204";
+		public string TestUri { get; init; } = "http://www.gstatic.com/generate_204";
 
 		public Dictionary<string, string> Headers { get; init; } = [];
 	}

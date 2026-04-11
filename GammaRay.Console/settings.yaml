@@ -1,69 +1,61 @@
 inbounds:
-  localhost: http://127.0.0.1:9999
-  host2:
-    protocol: http
-    endPoint: 127.0.0.2:9999
-  socks1:
+  hostHttpIn: http://127.0.0.3:2000
+  hostSocksIn:
     protocol: socks
-    endPoint: 127.0.0.2:2222
+    endPoint: 127.0.0.3:2001
 
 internetAccessPoints:
   finlandProxy:
     channels:
-      vless-reality-raw:
+      vless-reality-xhttp:
         protocol: socks
         endPoint: 127.0.0.2:2011
-        tags: [ fake-sni ]
-        availableInNetwork: []
-        parameters:
-          username: aaaa
-          password: bbb
-      shadowsocks:
-        url: socks://127.0.0.2:2012?username=user2&password=password2 # Short URL form
-        tags: [ tag1, tag2 ]
-        availableInNetwork: [ main, second ]
+        tags: []
+        availableInNetwork: [ default ]
 
 capabilityClasses:
   HTTPS:
     detectionRules:
-      - transport: StreamBased # TransportType .Transport [tcp -> StreamBased, udp -> DatagramBased]
-        port: 443 # int .Port
-        preread: # CapabilityDetectionRulePrereadConfiguration? .Preread
-          protocol: tls # string .Protocol
-          parameters: # PrereadParameterConfiguration[] .Parameters
-            - "alpn: saveAs='PropertyName' allowedValues=['h2', 'h3', 'http/1.1', 'h2c']"
-            # string format: "[ParameterName]: [Option1]=[Value1] [Option2]=[Value2]"
-            # saveAs (string? .SaveAs): property name or null, Name for capability parameter or null if no property required
-            # allowedValues (string[] .AllowedValues): format: ['value1', 'value2', 'value3'], List of allowed values for parameter,			
+      - transport: StreamBased
+        port: 443
     probingMethod:
       driver: HTTP
       parameters:
         useTLS: true
         path: /
-        userAgent: .ReadUserAgent
-        method: .ReadMethod
-      
+        method: GET
+  HTTP:
+    detectionRules:
+      - transport: StreamBased
+        port: 80
+    probingMethod:
+      driver: HTTP
+      parameters:
+        useTLS: false
+        path: /
+        method: GET
 
 endpointRoutingConfigurations:
-  sniFake: # EndpointRoutingConfiguration
-    IAPChain: [ [finlandProxy], [], [local:*] ] # InternetAccessPointChain .IAPCHain
-    queueMode: prioritized # enum: restricted | prioritized # RequirementPolicy .QueueMode
-    requiredChannelTags: [[sni-fake]] # string[] .ChannelTags
-    tagsRequimentMode: restricted # RequirementPolicy .TagsRequimentMode
+  default:
+    IAPChain: [ [local:*], [finlandProxy] ]
+  viaProxy:
+    IAPChain: [ [finlandProxy] ]
+    queueMode: restricted
+  viaLocal:
+    IAPChain: [ [local:*] ]
+    queueMode: restricted
 
-networkProfiles:
-  main:
-  second:
+networkProfiles: {}
 
 endPointCategories:
-  blocked:
+  blockedInRussia:
     list: blocked.txt
-  local:
+  blockedInNonRussia:
     list: local.txt
 
 routingGrid:
-  profilesOrder: [ main, second ]
+  profilesOrder: [ default ]
   grid:
-    blocked: [ sniFake, sniFake ]
-    local: [ sniFake, sniFake ]
-    default: [ sniFake, sniFake ]
+    blockedInRussia: [ viaProxy ]
+    blockedInNonRussia: [ viaLocal ]
+    default: [ default ]

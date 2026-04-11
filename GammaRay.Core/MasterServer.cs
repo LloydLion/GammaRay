@@ -13,48 +13,33 @@ namespace GammaRay.Core
 		IChannelDriverRegistry _channelDriverRegistry
 	)
 	{
-		public void Run()
+		public async Task Run()
 		{
-			AsyncContext.Run(async () =>
-			{
-				foreach (var inbound in _inbounds)
-					inbound.OnNewRequest(RequestCallback);
+			foreach (var inbound in _inbounds)
+				inbound.OnNewRequest(RequestCallback);
 
-				var cts = new CancellationTokenSource();
-				var tasks = new HashSet<Task>();
+			var cts = new CancellationTokenSource();
+			var tasks = new HashSet<Task>();
 
-				foreach (var inbound in _inbounds)
-					tasks.Add(inbound.Run(cts.Token));
+			foreach (var inbound in _inbounds)
+				tasks.Add(inbound.Run(cts.Token));
 
-				await Task.WhenAll(tasks);
-			});
+			await Task.WhenAll(tasks);
 		}
 
 		private async ValueTask RequestCallback(IInbound sender, RequestContext context)
 		{
-			IReadOnlyList<IAPChannel> channelsQueue = _router.MakeRoutingDecision(context);
+			IAPChannel channel = _router.MakeRoutingDecision(context);
 
-			await using IOpenChannel openChannel = await OpenChannelAsync(channelsQueue, context.TargetEndPoint);
+			await using IOpenChannel? openChannel =
+				await _channelDriverRegistry
+					.ProvideDriver(channel.DriverName)
+					.TryOpenChannelAsync(channel, context.TargetEndPoint) ?? throw new Exception("Failed to open channel");
 
 			IDataFlow correspondingFlow = openChannel.GetFlow();
 			IDataFlow incomingFlow = context.IncomingDataFlow;
 
 			await incomingFlow.JoinAsync(correspondingFlow);
-		}
-
-		private async ValueTask<IOpenChannel> OpenChannelAsync(IReadOnlyList<IAPChannel> channelsQueue, WebEndPoint targetEndPoint)
-		{
-			IOpenChannel? openChannel = null;
-			foreach (var channel in channelsQueue)
-			{
-				IChannelDriver driver = _channelDriverRegistry.ProvideDriver(channel.DriverName);
-				openChannel = await driver.TryOpenChannelAsync(channel, targetEndPoint);
-				if (openChannel is not null)
-					break;
-			}
-			if (openChannel is null)
-				throw new Exception("Connection failed");
-			return openChannel;
 		}
 	}
 }

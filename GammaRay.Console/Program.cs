@@ -3,47 +3,98 @@ using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.InternetAccess.Channels.Drivers;
-using GammaRay.Core.Network;
+using GammaRay.Core.InternetAccess.Channels.Testing;
 using GammaRay.Core.Network.Identity;
+using GammaRay.Core.Persistence;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using GammaRay.Core.Services.Probing;
+using GammaRay.Core.Services.Probing.Drivers;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils;
 using GammaRay.Core.Utils.FileSystem;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
+using Nito.AsyncEx;
 using Serilog;
-using System.Net;
 
 internal class Program
 {
-	private async static Task Main(string[] args)
+	private static void Main(string[] args)
 	{
-		Log.Logger = new LoggerConfiguration()
+		AsyncContext.Run(async () =>
+		{
+			Log.Logger = new LoggerConfiguration()
 			.WriteTo.Console()
 			.CreateLogger();
 
-		LoadSettings("settings.yaml");
+			var services = new ServiceCollection();
 
-		var httpInboundDriver = new HTTPInboundDriver(Options.Create(new HTTPInboundDriver.Options { }));
-		var httpInbound = httpInboundDriver.CreateInbound(new IPEndPoint(new IPAddress([127, 0, 0, 3]), 2000));
+			LoadSettings("settings.yaml", services);
 
-		var socksInboundDriver = new SOCKS5InboundDriver();
-		var socksInbound = socksInboundDriver.CreateInbound(new IPEndPoint(new IPAddress([127, 0, 0, 3]), 2001));
+			var sp = services
+				.AddSingleton(TimeProvider.System)
 
+				.Configure<SQLiteConnectionFactory.Options>(options => { options.ConnectionString = "Data Source=data.db"; })
+				.AddSingleton<IDbConnectionFactory, SQLiteConnectionFactory>()
+				.Configure<DbServiceRepository.Options>(s => { })
+				.AddSingleton<IServiceRepository, DbServiceRepository>()
+				.Configure<DbServiceStatusTableRepository.Options>(s => { })
+				.AddSingleton<IServiceStatusTableRepository, DbServiceStatusTableRepository>()
+				.AddSingleton<IIAPChannelStatusRepository, DbIAPChannelStatusRepository>()
 
-		var channelRegistry = new ReflectionBasedDriverRegistry<IChannelDriver>([new LocalChannelDriver(), new SOCKS5ChannelDriver()]);
+				.Configure<HTTPInboundDriver.Options>(s => { })
+				.AddSingleton<IInboundDriver, HTTPInboundDriver>()
+				.AddSingleton<IInboundDriver, SOCKS5InboundDriver>()
+				.AddSingleton<IDriverRegistry<IInboundDriver>, ReflectionBasedDriverRegistry<IInboundDriver>>()
 
-		var channel = new IAPChannel("socks", new GenericWebEndPoint(new WebHost("127.0.0.2"), 2011));
+				.AddSingleton<IChannelDriver, LocalChannelDriver>()
+				.AddSingleton<IChannelDriver, SOCKS5ChannelDriver>()
+				.AddSingleton<IDriverRegistry<IChannelDriver>, ReflectionBasedDriverRegistry<IChannelDriver>>()
 
-		var masterServer = new MasterServer([httpInbound, socksInbound], new DummyRouter(channel), channelRegistry);
+				.AddSingleton<IProbeDriver, HTTPProbingDriver>()
+				.AddSingleton<IDriverRegistry<IProbeDriver>, ReflectionBasedDriverRegistry<IProbeDriver>>()
 
-		masterServer.Run();
+#if UseWindowsComponents
+			.AddSingleton<INetworkIdentifier, GammaRay.Core.Windows.Management.PowerShellHost>()
+			.AddSingleton<INetworkIdentifier, GammaRay.Core.Windows.Network.Identity.WindowsNetProfileBasedNetworkIdentifier>()
+#else
+				.AddSingleton<INetworkIdentifier, InterfaceBasedNetworkIdentifier>()
+#endif
+				.AddSingleton<INetworkProfileMappingRepository, DummyNetProfileMapping>()
+
+				.AddSingleton<ICapabilityDetector, DefaultCapabilityDetector>()
+				.Configure<ProbingManager.Options>(s => { })
+				.AddSingleton<IProbingManager, ProbingManager>()
+
+				.AddSingleton<IIAPChannelPicker, StatusBasedChannelPicker>()
+				.Configure<DefaultIAPChannelMonitor.Options>(s => { })
+				.AddSingleton<IIAPChannelMonitor, DefaultIAPChannelMonitor>()
+				.AddSingleton<IIAPChannelSimpleTester, IAPChannelSimpleTester>()
+
+				.AddSingleton<SmartRouter>()
+
+				.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+
+			((DbServiceRepository)sp.GetRequiredService<IServiceRepository>()).Initialize();
+			((DbServiceStatusTableRepository)sp.GetRequiredService<IServiceStatusTableRepository>()).Initialize();
+			((DbIAPChannelStatusRepository)sp.GetRequiredService<IIAPChannelStatusRepository>()).Initialize();
+
+			((DefaultIAPChannelMonitor)sp.GetRequiredService<IIAPChannelMonitor>()).StartMonitoring();
+
+			var inbounds = sp.GetRequiredService<InboundConfigurationProvider>()
+				.PlainInboundConfigurations
+				.Select(c => sp.GetRequiredService<IDriverRegistry<IInboundDriver>>().CreateInboundFromConfiguration(c))
+				.ToArray();
+
+			var masterServer = new MasterServer(inbounds, sp.GetRequiredService<SmartRouter>(), sp.GetRequiredService<IDriverRegistry<IChannelDriver>>());
+
+			await masterServer.Run();
+		});
 	}
 
-	private static void LoadSettings(string path)
+	private static void LoadSettings(string path, IServiceCollection services)
 	{
 		// Entities:
 		// - InboundConfiguration
@@ -78,23 +129,30 @@ internal class Program
 		capabilityClassRawProvider.Initialize(YAMLLoader);
 
 		var inboundProvider = new InboundConfigurationProvider(inboundRawProvider);
+		services.AddSingleton(inboundProvider);
 		var networkProfileProvider = new NetworkProfileProvider(networkProfileRawProvider);
+		services.AddSingleton(networkProfileProvider);
 		var endPointCategoryProvider = new EndPointCategoriesProvider(endPointCategoryRawProvider);
+		services.AddSingleton(endPointCategoryProvider);
 		var capabilityClassProvider = new CapabilityClassProvider(capabilityClassRawProvider);
+		services.AddSingleton(capabilityClassProvider);
 
 		internetAccessPointRawProvider.Initialize(YAMLLoader, networkProfileProvider);
 		var internetAccessPointProvider = new InternetAccessPointProvider(internetAccessPointRawProvider, networkProfileProvider);
+		services.AddSingleton(internetAccessPointProvider);
 
 		endPointRoutingConfigurationRawProvider.Initialize(YAMLLoader, internetAccessPointProvider);
 		var endPointRoutingConfigurationProvider = new EndPointRoutingConfigurationProvider(endPointRoutingConfigurationRawProvider);
+		services.AddSingleton(endPointRoutingConfigurationProvider);
 
 		routingGridRawProvider.Initialize(YAMLLoader, networkProfileProvider, endPointCategoryProvider, endPointRoutingConfigurationProvider);
 		var routingGridProvider = new RoutingGridProvider(routingGridRawProvider);
+		services.AddSingleton(routingGridProvider);
 	}
 
 	private class DummyRouter(IAPChannel _channel) : IRouter
 	{
-		public IReadOnlyList<IAPChannel> MakeRoutingDecision(RequestContext context) => [_channel];
+		public IAPChannel MakeRoutingDecision(RequestContext context) => _channel;
 	}
 
 	private class DummyStatusRepository : IIAPChannelStatusRepository
@@ -109,17 +167,15 @@ internal class Program
 			return new IAPChannelStatus(point, channel, currentNetworkProfile, TimeSpan.FromMilliseconds(15));
 		}
 
-		public ValueTask UpdateStatusesAsync(IEnumerable<IAPChannelStatus> statusTable)
+		public void UpdateStatuses(IEnumerable<IAPChannelStatus> statusTable)
 		{
-			return ValueTask.CompletedTask;
+			
 		}
 	}
 
-	public class DummyNetProfileMapping : INetworkProfileMappingRepository
+	public class DummyNetProfileMapping(NetworkProfileProvider _networkProfileProvider) : INetworkProfileMappingRepository
 	{
-		private readonly static NetworkProfile MainProfile = new("main");
-
-		public NetworkProfile GetProfileFor(NetworkIdentity identity) => MainProfile;
+		public NetworkProfile GetProfileFor(NetworkIdentity identity) => _networkProfileProvider.DefaultProfile;
 	}
 
 	public class DummyServiceStatusTableOutput : IServiceStatusTableRepository

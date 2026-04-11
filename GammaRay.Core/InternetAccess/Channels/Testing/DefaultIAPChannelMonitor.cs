@@ -80,7 +80,7 @@ public sealed class DefaultIAPChannelMonitor(
 			if (_runningTestInformation is not null and { IsCompleted: true })
 				_runningTestInformation = null;
 
-			var now = _timeProvider.GetUtcNow().Date;
+			var now = _timeProvider.GetUtcNow().UtcDateTime;
 			var lastUpdate = _statusRepository.GetLastStatusUpdateTime(currentProfile);
 
 			if (now - lastUpdate >= _options.StatusDecayTime) // Status too old, retest it
@@ -120,7 +120,7 @@ public sealed class DefaultIAPChannelMonitor(
 				}
 			}
 
-			await _statusRepository.UpdateStatusesAsync(outputStatusTable);
+			_statusRepository.UpdateStatuses(outputStatusTable);
 		}
 		catch (Exception) { }
 		finally
