@@ -1,9 +1,7 @@
 using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess.Channels;
-using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow;
 using GammaRay.Core.Routing;
-using Nito.AsyncEx;
 
 namespace GammaRay.Core
 {

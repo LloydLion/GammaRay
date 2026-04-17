@@ -1,6 +1,6 @@
+using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow.Implementation;
-using GammaRay.Core.Protocols.HTTP;
 using GammaRay.Core.Protocols.SOCKS5;
 using GammaRay.Core.Utils;
 using System.Buffers;
@@ -11,15 +11,22 @@ using System.Text;
 namespace GammaRay.Core.Inbound;
 
 [RecommendedDriverName("socks")]
-public sealed class SOCKS5InboundDriver : IInboundDriver
+public sealed class SOCKS5InboundDriver(
+	TimeProvider _time,
+	IMonitoringSystem _monitoringSystem
+) : IInboundDriver
 {
+	private readonly TimeProvider _time = _time;
+	private readonly IMonitoringSystem _monitoringSystem = _monitoringSystem;
+
+
 	public IInbound CreateInbound(IPEndPoint localEndPoint)
 	{
-		return new Inbound(localEndPoint);
+		return new Inbound(localEndPoint, this);
 	}
 
 
-	private class Inbound(IPEndPoint _localEndPoint) : IInbound
+	private class Inbound(IPEndPoint _localEndPoint, SOCKS5InboundDriver _owner) : IInbound
 	{
 		private readonly ArrayPool<byte> _pool = ArrayPool<byte>.Create();
 		private IncomingRequestCallback? _requestCallback;
@@ -77,6 +84,11 @@ public sealed class SOCKS5InboundDriver : IInboundDriver
 
 			try
 			{
+				var now = _owner._time.GetUtcNow().UtcDateTime;
+				using var monitoringContext = new MonitoringContext("Connection", now, _owner._monitoringSystem);
+				using var report = monitoringContext.NewReport<Report>();
+				report.RemoteEndPoint = (IPEndPoint)client.RemoteEndPoint!;
+
 				var clientHello = await SocksClientHelloMessage.ReadMessageFromSocketAsync(client, messageBuffer);
 
 				var serverHello = new SocksServerHelloMessage(
@@ -92,6 +104,9 @@ public sealed class SOCKS5InboundDriver : IInboundDriver
 
 				var request = await SocksClientRequestMessage.ReadMessageFromSocketAsync(client, messageBuffer);
 				var materializedAddress = MaterializeAddress(request); // buffer will be reused, so we need to materialize the address before it gets overwritten
+				var endPoint = new WebEndPoint(materializedAddress, request.Port, TransportType.StreamBased);
+				report.AddressType = request.AddressType;
+				report.DestinationEndPoint = endPoint;
 
 				var reply = new SocksServerReplyMessage(
 					request.Command == SocksClientCommand.Connect ? SocksReplyCode.Succeeded : SocksReplyCode.CommandNotSupported,
@@ -104,9 +119,8 @@ public sealed class SOCKS5InboundDriver : IInboundDriver
 				if (reply.Code != SocksReplyCode.Succeeded)
 					return;
 
-				var endPoint = new WebEndPoint(materializedAddress, request.Port, TransportType.StreamBased);
 				var incomingFlow = new SocketBasedStreamDataFlow(client);
-				var context = new RequestContext(endPoint, incomingFlow);
+				var context = new RequestContext(endPoint, incomingFlow, now, monitoringContext);
 
 				await _requestCallback!.Invoke(this, context);
 			}
@@ -132,6 +146,15 @@ public sealed class SOCKS5InboundDriver : IInboundDriver
 				SocksAddressType.DomainName => Encoding.ASCII.GetString(request.Address.Span[1..]),
 				_ => throw new NotSupportedException($"Unsupported address type {request.AddressType}")
 			});
+		}
+
+		public class Report() : SystemReport(nameof(SOCKS5InboundDriver))
+		{
+			public ReportProperty<IPEndPoint> RemoteEndPoint { private get; set => SetProperty(ref field, value.Value); }
+
+			public ReportProperty<SocksAddressType> AddressType { private get; set => SetProperty(ref field, value.Value); }
+
+			public ReportProperty<WebEndPoint> DestinationEndPoint { private get; set => SetProperty(ref field, value.Value); }
 		}
 	}
 }

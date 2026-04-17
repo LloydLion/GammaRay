@@ -22,4 +22,13 @@ public sealed class IAPChannelStatus(
 
 
 	public bool IsAvailable => AverageAccessTime != TimeSpan.MaxValue;
+
+
+	public override string ToString()
+	{
+		var channelName = InternetAccessPoint.InverseChannels[Channel];
+		return $"""
+		Status {InternetAccessPoint}/{channelName} in {Network}: {(IsAvailable ? AverageAccessTime.TotalMilliseconds : "INF")}ms
+		""";
+	}
 }

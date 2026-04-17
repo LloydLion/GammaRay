@@ -52,7 +52,7 @@ public class YAMLCapabilityClassRawProvider : IRawSettingsProvider<IReadOnlyList
 				}).ToDictionary();
 			var probingMethod = new CapabilityProbingMethod(probingMethodDriver, probingMethodParameters);
 
-			var capabilityClass = new CapabilityClass(detectionRules, probingMethod);
+			var capabilityClass = new CapabilityClass(kv.Key, detectionRules, probingMethod);
 
 			return KeyValuePair.Create(kv.Key, capabilityClass);
 		}).ToArray();

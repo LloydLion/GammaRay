@@ -3,7 +3,7 @@ using GammaRay.Core.Utils;
 
 namespace GammaRay.Core.Routing;
 
-public sealed class EndPointRoutingConfiguration
+public sealed class EndPointRoutingConfiguration(string name)
 {
 	private readonly Dictionary<InternetAccessPointProvider, InternetAccessPointChain> _extendedChainsCache = [];
 
@@ -18,6 +18,8 @@ public sealed class EndPointRoutingConfiguration
 
 	public InternetAccessPointChain DefaultIAPChain { get; init; } = InternetAccessPointChain.Empty;
 
+	public string Name { get; } = name;
+
 
 	public InternetAccessPointChain GetExtendedIAPChain(InternetAccessPointProvider internetAccessPointProvider)
 	{
@@ -30,5 +32,10 @@ public sealed class EndPointRoutingConfiguration
 		extendedChain = IAPChain.Extend(internetAccessPointProvider);
 		_extendedChainsCache.Add(internetAccessPointProvider, extendedChain);
 		return extendedChain;
+	}
+
+	public override string ToString()
+	{
+		return Name;
 	}
 }

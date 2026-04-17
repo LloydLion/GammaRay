@@ -4,6 +4,7 @@ using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.InternetAccess.Channels.Drivers;
 using GammaRay.Core.InternetAccess.Channels.Testing;
+using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Persistence;
 using GammaRay.Core.Routing;
@@ -17,7 +18,6 @@ using GammaRay.Core.Utils;
 using GammaRay.Core.Utils.FileSystem;
 using Microsoft.Extensions.DependencyInjection;
 using Nito.AsyncEx;
-using Serilog;
 
 internal class Program
 {
@@ -25,10 +25,6 @@ internal class Program
 	{
 		AsyncContext.Run(async () =>
 		{
-			Log.Logger = new LoggerConfiguration()
-			.WriteTo.Console()
-			.CreateLogger();
-
 			var services = new ServiceCollection();
 
 			LoadSettings("settings.yaml", services);
@@ -75,7 +71,12 @@ internal class Program
 
 				.AddSingleton<SmartRouter>()
 
+				.AddSingleton<ConsoleMonitoringSystem>()
+				.AddSingleton<IMonitoringSystem, MultiHeadMonitoringSystem>(sp => new([sp.GetRequiredService<ConsoleMonitoringSystem>()]))
+
 				.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+
+			((NetworkIdentifierBase)sp.GetRequiredService<INetworkIdentifier>()).Initialize();
 
 			((DbServiceRepository)sp.GetRequiredService<IServiceRepository>()).Initialize();
 			((DbServiceStatusTableRepository)sp.GetRequiredService<IServiceStatusTableRepository>()).Initialize();
@@ -150,52 +151,10 @@ internal class Program
 		services.AddSingleton(routingGridProvider);
 	}
 
-	private class DummyRouter(IAPChannel _channel) : IRouter
-	{
-		public IAPChannel MakeRoutingDecision(RequestContext context) => _channel;
-	}
-
-	private class DummyStatusRepository : IIAPChannelStatusRepository
-	{
-		public DateTime GetLastStatusUpdateTime(NetworkProfile networkProfile)
-		{
-			return DateTime.UtcNow.AddDays(-1);
-		}
-
-		public IAPChannelStatus TryGetStatus(InternetAccessPoint point, IAPChannel channel, NetworkProfile currentNetworkProfile)
-		{
-			return new IAPChannelStatus(point, channel, currentNetworkProfile, TimeSpan.FromMilliseconds(15));
-		}
-
-		public void UpdateStatuses(IEnumerable<IAPChannelStatus> statusTable)
-		{
-			
-		}
-	}
 
 	public class DummyNetProfileMapping(NetworkProfileProvider _networkProfileProvider) : INetworkProfileMappingRepository
 	{
 		public NetworkProfile GetProfileFor(NetworkIdentity identity) => _networkProfileProvider.DefaultProfile;
-	}
-
-	public class DummyServiceStatusTableOutput : IServiceStatusTableRepository
-	{
-		private readonly TaskCompletionSource<ServiceStatusTable> _e = new(false);
-
-		public Decayable<ServiceStatusTable>? TryGetTable(Service service)
-		{
-			return null;
-		}
-
-		public void UpdateTable(ServiceStatusTable route)
-		{
-			_e.SetResult(route);	
-		}
-
-		public Task<ServiceStatusTable> AwaitForUpdate()
-		{
-			return _e.Task;
-		}
 	}
 
 	private class Locator : IFileSystemLocator

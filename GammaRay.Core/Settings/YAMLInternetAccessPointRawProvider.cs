@@ -75,7 +75,7 @@ public class YAMLInternetAccessPointRawProvider : IRawSettingsProvider<IReadOnly
 				return KeyValuePair.Create(channelName, channel);
 			}).ToDictionary();
 
-			return new InternetAccessPoint(name) { Channels = channels };
+			return new InternetAccessPoint(name, channels);
 		})
 		.ToArray();
 	}

@@ -26,4 +26,11 @@ public readonly record struct ServiceIAPStatus(TimeSpan AverageProbeTime)
 		else
 			return availableStatusSelector(ctx, this);
 	}
+
+	public override string ToString()
+	{
+		if (IsUnavailable)
+			return "Unavailable";
+		return $"{AverageProbeTime.TotalMilliseconds}ms";	
+	}
 }

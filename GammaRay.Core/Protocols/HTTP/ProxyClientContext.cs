@@ -1,4 +1,3 @@
-using Serilog;
 using System.Net;
 using System.Net.Sockets;
 
@@ -9,14 +8,12 @@ public class ProxyClientContext : IDisposable
 	private static readonly Random GlobalRandom = new();
 
 
-	public ProxyClientContext(Socket socket, ILogger baseLogger)
+	public ProxyClientContext(Socket socket)
 	{
 		Socket = socket;
 		Stream = new NetworkStream(socket);
 
 		ClientId = GlobalRandom.Next();
-
-		Logger = baseLogger.ForContext(nameof(ClientId), ClientId, destructureObjects: false);
 	}
 
 
@@ -25,8 +22,6 @@ public class ProxyClientContext : IDisposable
 	public Socket Socket { get; }
 
 	public int ClientId { get; }
-
-	public ILogger Logger { get; }
 
 
 	public void Dispose()

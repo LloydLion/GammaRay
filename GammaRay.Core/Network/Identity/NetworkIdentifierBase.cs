@@ -1,51 +1,93 @@
-using Serilog;
-using System.Diagnostics.CodeAnalysis;
+using GammaRay.Core.Monitoring;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 
 namespace GammaRay.Core.Network.Identity;
 
-public abstract class NetworkIdentifierBase : INetworkIdentifier
+public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 {
-	private const int RefreshEventTimeout = 3000;
-	private readonly static IPAddress InternetAddress = IPAddress.Parse("1.1.1.1");
+	private readonly static TimeSpan RefreshEventTimeout = TimeSpan.FromSeconds(3);
+	private readonly static IPAddress InternetAddress = new([1, 1, 1, 1]);
 
 
-	private readonly Timer _timer;
-	private readonly ILogger _logger;
+	private readonly ITimer _timer;
 	private readonly HashSet<Subscription> _subscribers = [];
+	private readonly IMonitoringSystem _monitoringSystem;
+	private readonly TimeProvider _time;
+	private SynchronizationContext? _synchronizationContext;
 	private DateTime? _lastRefresh;
 	private NetworkIdentity? _identity;
 	private int _isRefreshing = 0;
 
 
-	protected NetworkIdentifierBase(OSPlatform targetPlatform, ILogger logger)
+	protected NetworkIdentifierBase(IMonitoringSystem monitoringSystem, TimeProvider time)
 	{
-		TargetPlatform = targetPlatform;
-		_logger = logger;
-		_timer = new(RefreshEvent);
+		_monitoringSystem = monitoringSystem;
+		_time = time;
+		_timer = time.CreateTimer(RefreshEvent, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 	}
 
 
-	public OSPlatform TargetPlatform { get; }
+	public DateTime LastRefresh => _lastRefresh ?? throw ThrowNotInitialized();
 
-	public DateTime LastRefresh { get { InitializeIfNeed(); return _lastRefresh.Value; } }
+	public NetworkIdentity CurrentIdentity => _identity ?? throw ThrowNotInitialized();
 
-	public NetworkIdentity CurrentIdentity { get { InitializeIfNeed(); return _identity.Value; } }
+	protected SynchronizationContext SynchronizationContext => _synchronizationContext ?? throw ThrowNotInitialized();
 
+
+	public void Initialize()
+	{
+		_synchronizationContext = SynchronizationContext.Current;
+		InitiateNetworkIdentityRefresh();
+		NetworkChange.NetworkAddressChanged += NetworkChanged;
+	}
 
 	public IDisposable SubscribeForChanges(Action<INetworkIdentifier> callback)
 	{
-		var capturedContext = SynchronizationContext.Current ?? new SynchronizationContext();
-		var subscription = new Subscription(this, callback, capturedContext);
+		var subscription = new Subscription(this, callback);
 		_subscribers.Add(subscription);
 		return subscription;
 	}
 
+	public void Dispose()
+	{
+		_timer.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
-	protected abstract NetworkIdentity FetchCurrentNetworkIdentity();
+	public bool InitiateNetworkIdentityRefresh()
+	{
+		if (Interlocked.Exchange(ref _isRefreshing, 1) == 1)
+			return false;
+
+		using var context = new MonitoringContext("NetworkIdentityRefresh", _time, _monitoringSystem);
+		using var report = context.NewReport<Report>();
+		report.IdentifierName = GetType().Name;
+
+		try
+		{
+			_identity = FetchCurrentNetworkIdentity(context);
+			_lastRefresh = DateTime.UtcNow;
+
+			foreach (var subscriber in _subscribers)
+				subscriber.Call();
+
+			report.NewNetworkIdentity = CurrentIdentity;
+		}
+		catch (Exception ex)
+		{
+			report.Exception = ex;
+		}
+		finally
+		{
+			_isRefreshing = 0;
+		}
+
+		return true;
+	}
+
+	protected abstract NetworkIdentity FetchCurrentNetworkIdentity(MonitoringContext monitoringContext);
 
 	protected static IPAddress TraceRouteToInternet()
 	{
@@ -63,72 +105,44 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier
 		throw new Exception("No network interface found for IP " + ipAddress);
 	}
 
-	[MemberNotNull(nameof(_identity), nameof(_lastRefresh))]
-	private void InitializeIfNeed()
-	{
-		if (_identity.HasValue && _lastRefresh.HasValue)
-			return;
-
-		_identity = FetchCurrentNetworkIdentity();
-		_lastRefresh = DateTime.UtcNow;
-
-
-		_logger.Information("Current network is {NetworkIdentity}", _identity.Value.SerializeToString());
-
-		NetworkChange.NetworkAddressChanged += NetworkChanged;
-	}
-
 	private void NetworkChanged(object? sender, EventArgs e)
 	{
-		_timer.Change(RefreshEventTimeout, Timeout.Infinite);
+		_timer.Change(RefreshEventTimeout, Timeout.InfiniteTimeSpan);
 	}
 
 	private void RefreshEvent(object? state)
 	{
-		if (Interlocked.Exchange(ref _isRefreshing, 1) == 1)
-		{
-			_timer.Change(RefreshEventTimeout, Timeout.Infinite);
-			return;
-		}
-
-		try
-		{
-			_identity = FetchCurrentNetworkIdentity();
-			_lastRefresh = DateTime.UtcNow;
-
-			foreach (var subscriber in _subscribers)
-				subscriber.Call();
-
-			_logger.Information("Current network changed to {NetworkIdentity}", _identity.Value.SerializeToString());
-		}
-		catch (Exception ex)
-		{
-			_logger.Error(ex, "Current network changed, but identification has failed, using old values");
-		}
-		finally
-		{
-			_isRefreshing = 0;
-		}
+		var started = InitiateNetworkIdentityRefresh();
+		if (started == false)
+			_timer.Change(RefreshEventTimeout, Timeout.InfiniteTimeSpan);
 	}
 
+	private static InvalidOperationException ThrowNotInitialized() => new($"Not initialized. Call {nameof(Initialize)}() method first");
+
+
+	public class Report() : SystemReport(nameof(NetworkIdentifierBase))
+	{
+		public ReportProperty<NetworkIdentity> NewNetworkIdentity { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<Exception> Exception { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<string> IdentifierName { get; set => SetProperty(ref field, value.Value); }
+	}
 
 	private class Subscription(
 		NetworkIdentifierBase _owner,
-		Action<INetworkIdentifier> _callback,
-		SynchronizationContext _capturedContext
-
+		Action<INetworkIdentifier> _callback
 	) : IDisposable
 	{
 		public void Dispose() => _owner._subscribers.Remove(this);
 
-		public void Call() =>
-			_capturedContext.Send(_ =>
+		public void Call()
+		{
+			try
 			{
-				try
-				{
-					_callback(_owner);
-				}
-				catch (Exception) { }
-			}, null);
+				_callback(_owner);
+			}
+			catch (Exception) { }
+		}
 	}
 }

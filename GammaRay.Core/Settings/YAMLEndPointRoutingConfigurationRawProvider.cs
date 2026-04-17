@@ -50,7 +50,7 @@ public sealed class YAMLEndPointRoutingConfigurationRawProvider : IRawSettingsPr
 			}).ToArray())).ToArray());
 
 
-			var cfg = new EndPointRoutingConfiguration()
+			var cfg = new EndPointRoutingConfiguration(name)
 			{
 				ChainPolicy = queueMode,
 				TagsPolicy = tagsRequirementMode,

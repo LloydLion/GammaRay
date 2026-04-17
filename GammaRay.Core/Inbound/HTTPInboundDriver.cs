@@ -1,9 +1,9 @@
+using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow.Implementation;
 using GammaRay.Core.Protocols.HTTP;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
-using Serilog;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -13,14 +13,20 @@ using HttpResponseHeader = GammaRay.Core.Protocols.HTTP.HttpResponseHeader;
 namespace GammaRay.Core.Inbound;
 
 [RecommendedDriverName("http")]
-public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> options) : IInboundDriver
+public sealed class HTTPInboundDriver(
+	TimeProvider _time,
+	IMonitoringSystem _monitoringSystem,
+	IOptions<HTTPInboundDriver.Options> options
+) : IInboundDriver
 {
 	private readonly Options _options = options.Value;
+	private readonly TimeProvider _time = _time;
+	private readonly IMonitoringSystem _monitoringSystem = _monitoringSystem;
 
 
 	public IInbound CreateInbound(IPEndPoint localEndPoint)
 	{
-		return new Inbound(localEndPoint, _options);
+		return new Inbound(localEndPoint, this);
 	}
 
 
@@ -29,10 +35,8 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 		public TimeSpan MasterClientTimeout { get; set; } = TimeSpan.FromSeconds(2);
 	}
 
-	private class Inbound(IPEndPoint localEndPoint, Options options) : IInbound
+	private class Inbound(IPEndPoint localEndPoint, HTTPInboundDriver owner) : IInbound
 	{
-		private static readonly ILogger _logger = Log.ForContext<Inbound>();
-
 		private const string ProxyConnectionHeader = "Proxy-Connection";
 		private static readonly string ConnectionEstablishedMessageString =
 			new HttpResponseHeader(200, "Connection established", HttpMessageHeader.HTTP11, []).Serialize();
@@ -41,8 +45,9 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 
 
 		private readonly IPEndPoint _localEndPoint = localEndPoint;
-		private readonly Options _options = options;
+		private readonly HTTPInboundDriver _owner = owner;
 		private IncomingRequestCallback? _requestCallback;
+
 
 		public void OnNewRequest(IncomingRequestCallback callback) => _requestCallback = callback;
 
@@ -93,6 +98,12 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 					if (isClientConnected == false)
 						return;
 
+					// -- Prepare to processing
+					var now = _owner._time.GetUtcNow().UtcDateTime;
+					using var monitoring = new MonitoringContext("Connection", now, _owner._monitoringSystem);
+					using var report = monitoring.NewReport<Report>();
+					report.RemoteEndPoint = (IPEndPoint)clientContext.Socket.RemoteEndPoint!;
+
 					// -- Read HTTP header for proxy
 					var rawHeader = HttpMessageHeader.ReadRawHeader(clientContext.Stream);
 					if (rawHeader.Length == 0)
@@ -101,12 +112,14 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 					var destinationEndPoint = header.Uri.EndPoint;
 					destinationEndPoint ??= GenericWebEndPoint.Parse(header.Headers.TryGetSingle("Host")
 						?? throw new Exception("Client do not specified destination host"));
+					report.DestinationEndPoint = destinationEndPoint.Value;
 
 					// -- Create request context
 					var requestType = header.Method == "CONNECT" ? HttpProxyRequestType.Connect : HttpProxyRequestType.HTTP;
 					var requestContext = new RequestContext(
 						new WebEndPoint(destinationEndPoint.Value, TransportType.StreamBased),
-						FormIncomingDataFlow(clientContext, requestType)
+						FormIncomingDataFlow(clientContext, requestType),
+						now, monitoring
 					);
 
 					// -- Write response
@@ -120,20 +133,15 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 					var connectionHeaderValue = header.Headers.TryGetSingle(ProxyConnectionHeader);
 					if (string.Equals(connectionHeaderValue, "keep-alive", StringComparison.OrdinalIgnoreCase))
 					{
-						clientContext.Logger.Information("Client requested to keep connection alive");
 						shouldKeepConnection = true;
 					}
+					report.ShouldKeepConnectionAlive = shouldKeepConnection;
 				}
 				while (shouldKeepConnection);
 			}
-			catch (Exception ex)
-			{
-				clientContext.Logger.Error(ex, "Error while handling client");
-			}
+			catch (Exception) { }
 			finally
 			{
-				clientContext.Logger.Information("Client done, connection closed");
-
 				clientContext.Dispose();
 			}
 		}
@@ -167,11 +175,21 @@ public sealed class HTTPInboundDriver(IOptions<HTTPInboundDriver.Options> option
 
 		private ProxyClientContext ConfigureIncomingClient(Socket clientSocket)
 		{
-			var clientContext = new ProxyClientContext(clientSocket, _logger);
-			clientContext.Stream.WriteTimeout = clientContext.Stream.ReadTimeout = _options.MasterClientTimeout.TotalMillisecondsInt;
+			var clientContext = new ProxyClientContext(clientSocket);
+			clientContext.Stream.WriteTimeout = clientContext.Stream.ReadTimeout = _owner._options.MasterClientTimeout.TotalMillisecondsInt;
 			return clientContext;
 		}
 
 		private ValueTask CallCallback(RequestContext requestContext) => _requestCallback!.Invoke(this, requestContext);
+
+
+		public class Report() : SystemReport(nameof(HTTPInboundDriver))
+		{
+			public ReportProperty<IPEndPoint> RemoteEndPoint { get; set => SetProperty(ref field, value.Value); }
+
+			public ReportProperty<GenericWebEndPoint> DestinationEndPoint { get; set => SetProperty(ref field, value.Value); }
+
+			public ReportProperty<bool> ShouldKeepConnectionAlive { get; set => SetProperty(ref field, value.Value); }
+		}
 	}
 }

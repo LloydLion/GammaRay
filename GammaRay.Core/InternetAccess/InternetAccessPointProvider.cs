@@ -34,7 +34,7 @@ public sealed class InternetAccessPointProvider
 		{
 			var localChannel = new IAPChannel(LocalIAPChannelDriverName, default) { AvailableInNetwork = [profile] };
 			var channels = new Dictionary<string, IAPChannel>() { [LocalIAPChannelName] = localChannel };
-			return new InternetAccessPoint($"{LocalIAPPrefix}{profile.Name}") { Channels = channels };
+			return new InternetAccessPoint($"{LocalIAPPrefix}{profile.Name}", channels);
 		}
 	}
 

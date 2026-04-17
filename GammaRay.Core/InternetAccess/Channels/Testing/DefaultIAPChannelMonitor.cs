@@ -1,3 +1,4 @@
+using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Utils;
@@ -15,7 +16,8 @@ public sealed class DefaultIAPChannelMonitor(
 	IIAPChannelSimpleTester _simpleChannelTester,
 	InternetAccessPointProvider _internetAccessPointProvider,
 
-	IOptions<DefaultIAPChannelMonitor.Options> options
+	IOptions<DefaultIAPChannelMonitor.Options> options,
+	IMonitoringSystem _monitoringSystem
 ) : IIAPChannelMonitor, IDisposable
 {
 	private readonly Options _options = options.Value;
@@ -96,12 +98,17 @@ public sealed class DefaultIAPChannelMonitor(
 	private async Task PerformFullChannelTest(RunningFullTestInformation testInformation)
 	{
 		await Task.Yield();
+		var cancellationToken = testInformation.Cancellation.Token;
+		using var context = new MonitoringContext("Testing", _timeProvider, _monitoringSystem);
+		using var report = context.NewReport<Report>();
+		report.PerformingInNetwork = testInformation.PerformingInNetwork;
+
 		try
 		{
-			var cancellationToken = testInformation.Cancellation.Token;
 			var currentProfile = testInformation.PerformingInNetwork;
 
 			var baseLine = await getLocalBaseLineResult(currentProfile, cancellationToken);
+			report.LocalBaseLine = baseLine;
 			var outputStatusTable = new List<IAPChannelStatus>();
 
 			foreach (var IAP in _internetAccessPointProvider.PlainRemoteInternetAccessPoints)
@@ -120,11 +127,18 @@ public sealed class DefaultIAPChannelMonitor(
 				}
 			}
 
+			report.Result = outputStatusTable;
 			_statusRepository.UpdateStatuses(outputStatusTable);
 		}
-		catch (Exception) { }
+		catch (OperationCanceledException) { }
+		catch (Exception ex)
+		{
+			report.Exception = ex;
+		}
 		finally
 		{
+			if (cancellationToken.IsCancellationRequested)
+				report.WasInterrupted = true;
 			testInformation.IsCompleted = true;
 		}
 
@@ -193,5 +207,18 @@ public sealed class DefaultIAPChannelMonitor(
 		public CancellationTokenSource Cancellation { get; } = new CancellationTokenSource();
 
 		public bool IsCompleted { get; set; } = false;
+	}
+
+	public class Report() : SystemReport(nameof(DefaultIAPChannelMonitor))
+	{
+		public ReportProperty<NetworkProfile> PerformingInNetwork { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<TimeSpan> LocalBaseLine { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<IReadOnlyCollection<IAPChannelStatus>> Result { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<Exception> Exception { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<bool> WasInterrupted { get; set => SetProperty(ref field, value.Value); }
 	}
 }

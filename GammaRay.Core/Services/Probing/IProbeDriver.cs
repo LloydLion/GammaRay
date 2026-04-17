@@ -1,4 +1,4 @@
-using GammaRay.Core.InternetAccess.Channels;
+using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow;
 
@@ -10,6 +10,7 @@ public interface IProbeDriver
 		IDataFlow targetOutcomingFlow,
 		WebEndPoint endPoint,
 		IReadOnlyDictionary<string, string> parameters,
-		CommonProbeDriverOptions options
+		CommonProbeDriverOptions options,
+		MonitoringContext monitoringContext
 	);
 }

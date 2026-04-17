@@ -1,10 +1,12 @@
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
+using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
+using System.Reflection;
 
 namespace GammaRay.Core.Services.Probing;
 
@@ -15,6 +17,9 @@ public sealed class ProbingManager(
 
 	INetworkIdentifier _networkIdentifier,
 	INetworkProfileMappingRepository _networkProfileRepository,
+
+	IMonitoringSystem _monitoringSystem,
+	TimeProvider _time,
 
 	IOptions<ProbingManager.Options> options
 ) : IProbingManager
@@ -27,7 +32,6 @@ public sealed class ProbingManager(
 	{
 		if (_tasks.Any(s => s.Service == service) == false)
 		{
-			Console.WriteLine($"New probing for service on {service.EndPoint} via: {string.Join(", ", pointsToProbeVia.Select(s => s.Name))}");
 			var probingTask = new ProbingTask(service);
 
 			var task = StartProbingTask(service, pointsToProbeVia, routeOutput, () => _tasks.Remove(probingTask));
@@ -35,15 +39,17 @@ public sealed class ProbingManager(
 
 			_tasks.Add(probingTask);
 		}
-		else
-		{
-			Console.WriteLine($"Probing for service on {service.EndPoint} already running");
-		}
 	}
 
 	private async Task StartProbingTask(Service service, IReadOnlyCollection<InternetAccessPoint> pointsToProbeVia, IServiceStatusTableRepository routeOutput, Action callback)
 	{
 		await Task.Yield();
+
+		var start = _time.GetUtcNow().UtcDateTime;
+		using var context = new MonitoringContext("Probing", start, _monitoringSystem);
+		using var report = context.NewReport<ProbingTaskReport>();
+		report.Service = service;
+		report.InternetAccessPoints = ReportProperty.Create(pointsToProbeVia);
 
 		try
 		{
@@ -51,8 +57,10 @@ public sealed class ProbingManager(
 			var endPoint = service.EndPoint;
 
 			var driver = _probeDriverRegistry.ProvideDriver(probingMethod.Driver);
+			report.DriverName = probingMethod.Driver;
 
 			var materializedParameters = service.Capability.MaterializedProbingParameters;
+			report.ProbingParameters = ReportProperty.Create(materializedParameters);
 
 
 			var rawStatusTable = new Dictionary<InternetAccessPoint, ServiceIAPStatus>();
@@ -65,7 +73,7 @@ public sealed class ProbingManager(
 				var channel = channelStatus.Channel;
 				var channelDriver = _channelDriverRegistry.ProvideDriver(channel.DriverName);
 
-				var rawStatus = await PerformProbeAsync(driver, channelDriver, channel, endPoint, materializedParameters);
+				var rawStatus = await PerformProbeAsync(driver, channelDriver, IAP, channel, endPoint, materializedParameters, context);
 				// Consider null in rawStatus as failed probe with no result (positive or negative)
 				if (rawStatus is null)
 					continue;
@@ -79,15 +87,13 @@ public sealed class ProbingManager(
 
 
 			var statusTable = new ServiceStatusTable(service, rawStatusTable);
-
-			Console.WriteLine($"Probing for service on {service.EndPoint} completed with results:\n" +
-				$"\t{string.Join(", ", rawStatusTable.Select(kv => $"{kv.Key.Name}={(kv.Value.IsAvailable ? kv.Value.AverageProbeTime.TotalMilliseconds.ToString() : "INF")}ms"))}");
+			report.Result = statusTable;
 
 			routeOutput.UpdateTable(statusTable);
 		}
-		catch (Exception)
+		catch (Exception ex)
 		{
-		
+			report.Exception = ex;
 		}
 		finally
 		{
@@ -98,11 +104,16 @@ public sealed class ProbingManager(
 	private async ValueTask<ServiceIAPStatus?> PerformProbeAsync(
 		IProbeDriver driver,
 		IChannelDriver channelDriver,
+		InternetAccessPoint IAP,
 		IAPChannel channel,
 		WebEndPoint endPoint,
-		IReadOnlyDictionary<string, string> materializedParameters
+		IReadOnlyDictionary<string, string> materializedParameters,
+		MonitoringContext monitoringContext
 	)
 	{
+		using var report = monitoringContext.NewReport<IAPProbingReport>();
+		report.InternetAccessPoint = IAP;
+		report.ChannelName = IAP.InverseChannels[channel];
 		var accMetric = TimeSpan.Zero;
 
 		int successInRow = 0;
@@ -112,7 +123,7 @@ public sealed class ProbingManager(
 			if (openChannel is null)
 				return null;
 
-			var probeResult = await driver.ProbeAsync(openChannel.GetFlow(), endPoint, materializedParameters, _options.ProbeOptions);
+			var probeResult = await driver.ProbeAsync(openChannel.GetFlow(), endPoint, materializedParameters, _options.ProbeOptions, monitoringContext);
 			accMetric += probeResult.ProbeDuration;
 
 			if (probeResult.Status is ProbeResult.ProbeStatus.Success)
@@ -133,11 +144,14 @@ public sealed class ProbingManager(
 			await Task.Delay(_options.ProbeInterval);
 		}
 
+		report.Result = ServiceIAPStatus.Unavailable;
 		return ServiceIAPStatus.Unavailable;
 
 	success:
 
-		return new ServiceIAPStatus(accMetric / _options.RequiredSuccessProbeCount);
+		var result = new ServiceIAPStatus(accMetric / _options.RequiredSuccessProbeCount);
+		report.Result = result;
+		return result;
 	}
 
 	private IAPChannelStatus? GetAvailableChannel(InternetAccessPoint IAP)
@@ -176,5 +190,29 @@ public sealed class ProbingManager(
 		{
 			_task = task;
 		}
+	}
+
+	private class ProbingTaskReport() : SystemReport($"{nameof(ProbingManager)}/ProbingTask")
+	{
+		public ReportProperty<Service> Service { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<string> DriverName { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<IReadOnlyCollection<InternetAccessPoint>> InternetAccessPoints { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<IReadOnlyDictionary<string, string>> ProbingParameters { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<ServiceStatusTable> Result { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<Exception> Exception { get; set => SetProperty(ref field, value.Value); }
+	}
+
+	private class IAPProbingReport() : SystemReport($"{nameof(ProbingManager)}/IAPProbing")
+	{
+		public ReportProperty<InternetAccessPoint> InternetAccessPoint { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<string> ChannelName { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<ServiceIAPStatus> Result { get; set => SetProperty(ref field, value.Value); }
 	}
 }

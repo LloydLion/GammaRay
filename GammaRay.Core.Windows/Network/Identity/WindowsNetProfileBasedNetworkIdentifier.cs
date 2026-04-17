@@ -1,6 +1,6 @@
+using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Windows.Management;
-using Serilog;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -9,12 +9,13 @@ using System.Text.Json.Serialization;
 namespace GammaRay.Core.Windows.Network.Identity;
 
 
-public partial class WindowsNetProfileBasedNetworkIdentifier(PowerShellHost _powerShell) : NetworkIdentifierBase(OSPlatform.Windows, _logger)
+public partial class WindowsNetProfileBasedNetworkIdentifier(
+	IMonitoringSystem monitoringSystem,
+	TimeProvider timeProvider,
+	PowerShellHost _powerShell
+) : NetworkIdentifierBase(monitoringSystem, timeProvider)
 {
-	private static readonly ILogger _logger = Log.ForContext<WindowsNetProfileBasedNetworkIdentifier>();
-
-
-	protected override NetworkIdentity FetchCurrentNetworkIdentity()
+	protected override NetworkIdentity FetchCurrentNetworkIdentity(MonitoringContext monitoringContext)
 	{
 		var internetInterfaceIP = TraceRouteToInternet();
 		var internetInterface = GetInterfaceByIP(internetInterfaceIP);

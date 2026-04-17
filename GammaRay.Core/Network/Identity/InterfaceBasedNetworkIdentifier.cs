@@ -1,15 +1,12 @@
-using Serilog;
+using GammaRay.Core.Monitoring;
 using System.Net.Sockets;
 
 
 namespace GammaRay.Core.Network.Identity;
 
-public class InterfaceBasedNetworkIdentifier() : NetworkIdentifierBase(default, _logger)
+public class InterfaceBasedNetworkIdentifier(IMonitoringSystem monitoringSystem, TimeProvider time) : NetworkIdentifierBase(monitoringSystem, time)
 {
-	private static readonly ILogger _logger = Log.ForContext<InterfaceBasedNetworkIdentifier>();
-
-
-	protected override NetworkIdentity FetchCurrentNetworkIdentity()
+	protected override NetworkIdentity FetchCurrentNetworkIdentity(MonitoringContext monitoringContext)
 	{
 		var internetInterfaceIP = TraceRouteToInternet();
 		var internetInterface = GetInterfaceByIP(internetInterfaceIP);

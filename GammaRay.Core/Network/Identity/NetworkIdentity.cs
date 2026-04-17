@@ -33,4 +33,6 @@ public readonly struct NetworkIdentity
 
 	public override bool Equals(object? obj) =>
 		obj is NetworkIdentity other && other.IdentityStrings.SequenceEqual(IdentityStrings);
+
+	public override string ToString() => SerializeToString();
 }

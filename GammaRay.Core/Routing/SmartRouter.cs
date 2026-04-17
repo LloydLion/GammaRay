@@ -1,6 +1,7 @@
 using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
+using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Routing.NetworkProfiles;
@@ -24,10 +25,7 @@ public sealed class SmartRouter(
 	IServiceStatusTableRepository _routeRepository,
 	IProbingManager _prober,
 
-	IIAPChannelPicker _channelPicker,
-
-	EndPointRoutingConfigurationProvider _endPointRoutingConfigurationProvider,
-	CapabilityClassProvider _capabilityClassProvider
+	IIAPChannelPicker _channelPicker
 ) : IRouter
 {
 	public IAPChannel MakeRoutingDecision(RequestContext context)
@@ -58,14 +56,14 @@ public sealed class SmartRouter(
 
 
 		var channelRequirements = new IAPChannelRequirements() { RequiredTags = routingConfiguration.RequiredTags };
-		IAPChannel result;
+		(InternetAccessPoint IAP, IAPChannel Channel) result;
 
 		if (statusTableDec is not null)
 		{
 			var table = statusTableDec.Value.Value;
 			foreach (var blob in IAPChain.Blobs)
 			{
-				IAPChannel? bestChannel = null;
+				(InternetAccessPoint, IAPChannel)? bestChannel = null;
 				var bestMetric = TimeSpan.MaxValue;
 				foreach (var IAP in blob.Points)
 				{
@@ -80,12 +78,12 @@ public sealed class SmartRouter(
 					if (totalMetric < bestMetric)
 					{
 						bestMetric = totalMetric;
-						bestChannel = channelStatus.Channel;
+						bestChannel = (IAP, channelStatus.Channel);
 					}
 				}
 
 				if (bestChannel is not null)
-					{ result = bestChannel; goto returnResult; }
+					{ result = bestChannel.Value; goto returnResult; }
 			}
 
 			// In case of no route fallback to routing using default IAP chain
@@ -97,7 +95,7 @@ public sealed class SmartRouter(
 			{
 				var status = _channelPicker.PickBestChannel(IAP, networkProfile, channelRequirements);
 				if (status is not null and { IsAvailable: true })
-					{ result = status.Channel; goto returnResult; }
+					{ result = (IAP, status.Channel); goto returnResult; }
 			}
 		}
 
@@ -106,11 +104,11 @@ public sealed class SmartRouter(
 	returnResult:
 		PrintReport(result, context, networkProfile, endPointCategory, routingConfiguration, service, statusTableDec);
 
-		return result;
+		return result.Channel;
 	}
 
 
-	private void PrintReport(IAPChannel result,
+	private void PrintReport((InternetAccessPoint IAP, IAPChannel Channel) result,
 		RequestContext context,
 		NetworkProfile profile,
 		EndPointCategory endPointCategory,
@@ -119,23 +117,35 @@ public sealed class SmartRouter(
 		Decayable<ServiceStatusTable>? statusTable
 	)
 	{
-		var resultIAP = _internetAccessPointProvider.PlainInternetAccessPoints.First(iap => iap.Channels.Values.Contains(result));
+		using var report = context.MonitoringContext.NewReport<Report>();
 
-		Console.WriteLine("== Routing decision report: ");
-		Console.WriteLine("\tResult: " + $"{resultIAP.Name}/{resultIAP.Channels.Single(s => s.Value == result).Key}");
+		report.ResultIAP = result.IAP;
+		report.ResultChannelName = result.IAP.InverseChannels[result.Channel];
+		report.NetworkProfile = profile;
+		report.EndPointCategory = endPointCategory;
+		report.RoutingConfiguration = routingConfiguration;
+		report.CapabilityClass = service.Capability.Class;
 
-		Console.WriteLine("\tEndpoint: " + context.TargetEndPoint);
-		Console.WriteLine("\tNetworkProfile: " + profile.Name);
-		Console.WriteLine("\tEndpointCategory: " + endPointCategory.Name);
-		var name = _endPointRoutingConfigurationProvider.EndPointRoutingConfigurations.Single(kv => kv.Value == routingConfiguration).Key;
-		Console.WriteLine("\tRoutingConfiguration: " + name);
-		name = _capabilityClassProvider.CapabilityClasses.Single(kv => kv.Value == service.Capability.Class).Key;
-		Console.WriteLine("\tCapability: " + name);
 		if (statusTable is not null)
-			Console.WriteLine("\tStatusTable: " + string.Join(", ", statusTable.Value.Value.Table
-				.Select(s => $"{s.Key.Name}={(s.Value.IsAvailable ? s.Value.AverageProbeTime.TotalMilliseconds : "INF")}ms")
-			));
-		else Console.WriteLine("\tStatusTable: None");
-		Console.WriteLine("\tTime: " + context.InitialTime);
+			report.StatusTable = statusTable.Value.Value;
+		else report.StatusTable = null;
+	}
+
+
+	public class Report() : SystemReport(nameof(SmartRouter))
+	{
+		public ReportProperty<InternetAccessPoint> ResultIAP { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<string> ResultChannelName { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<NetworkProfile> NetworkProfile { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<EndPointCategory> EndPointCategory { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<EndPointRoutingConfiguration> RoutingConfiguration { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<CapabilityClass> CapabilityClass { get; set => SetProperty(ref field, value.Value); }
+
+		public ReportProperty<ServiceStatusTable?> StatusTable { get; set => SetProperty(ref field, value.Value); }
 	}
 }
