@@ -33,7 +33,7 @@ public class YAMLEndPointCategoryRawProvider(IFileSystemLocator _fileSystemLocat
 			{
 				var path = listNode.Bind<string>();
 
-				using var stream = _fileSystemLocator!.OpenFile(path);
+				using var stream = _fileSystemLocator!.Open(path);
 				using var reader = new StreamReader(stream);
 				while (true)
 				{

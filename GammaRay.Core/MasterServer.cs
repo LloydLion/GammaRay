@@ -11,16 +11,15 @@ namespace GammaRay.Core
 		IChannelDriverRegistry _channelDriverRegistry
 	)
 	{
-		public async Task Run()
+		public async Task Run(CancellationToken stopToken)
 		{
 			foreach (var inbound in _inbounds)
 				inbound.OnNewRequest(RequestCallback);
 
-			var cts = new CancellationTokenSource();
 			var tasks = new HashSet<Task>();
 
 			foreach (var inbound in _inbounds)
-				tasks.Add(inbound.Run(cts.Token));
+				tasks.Add(inbound.Run(stopToken));
 
 			await Task.WhenAll(tasks);
 		}

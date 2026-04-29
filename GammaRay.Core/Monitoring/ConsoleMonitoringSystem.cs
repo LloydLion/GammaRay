@@ -38,8 +38,12 @@ public sealed class ConsoleMonitoringSystem : IMonitoringSystem
 		PrintColoredRaw("[", null);
 		PrintColoredString(report.MonitoringContext.Type);
 		PrintColoredRaw("][", null);
-		PrintColoredRaw(report.MonitoringContext.Id.GetHashCode().ToString("X4"),
-			ObjectColorizer.ColorForGuid(report.MonitoringContext.Id));
+
+		var contextId = report.MonitoringContext.Id;
+		var contextIdBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref contextId, 1));
+		var printableId = BitConverter.ToInt32(contextIdBytes);
+
+		PrintColoredRaw(printableId.ToString("X4"), ObjectColorizer.ColorForByte(contextIdBytes[0]));
 		PrintColoredRaw("][", null);
 		PrintColoredString(report.Component);
 		PrintColoredRaw("]", null);
@@ -68,80 +72,8 @@ public sealed class ConsoleMonitoringSystem : IMonitoringSystem
 			if (property.IsSet == false)
 				Console.Write("Unset");
 			else
-				ObjectPrinter.Print(property.Value);
+				MonitoringObjectPrinter.PrintObject(property.Value, Console.Out);
 			Console.WriteLine();
-		}
-	}
-
-	private static class ObjectPrinter
-	{
-		private static readonly Dictionary<Type, Action<object>> _classPrinters = [];
-
-
-		public static void Print<T>(T value)
-		{
-			if (typeof(T).IsValueType)
-				Console.Write(value!.ToString());
-			else if (value is null)
-				Console.Write("Null");
-			else
-			{
-				if (_classPrinters.TryGetValue(typeof(T), out var printer) == false)
-					_classPrinters.Add(typeof(T), printer = CreateClassPrinter(typeof(T)));
-
-				printer(value);
-			}
-		}
-
-		private static Action<object> CreateClassPrinter(Type type)
-		{
-			if (type == typeof(string))
-				return obj => Console.Write((string)obj);
-
-			var enumerableInterface = type.GetInterfaces().FirstOrDefault(inf =>
-				inf.IsGenericType && inf.GetGenericTypeDefinition() == typeof(IEnumerable<>)
-			);
-
-			if (enumerableInterface is not null)
-			{
-				var collectionType = enumerableInterface.GetGenericArguments()[0];
-				var delegateType = typeof(Action<>).MakeGenericType([enumerableInterface]);
-				var printer = typeof(ObjectPrinter)
-					.GetMethod(nameof(PrintGenericCollection), BindingFlags.Static | BindingFlags.NonPublic)!
-					.MakeGenericMethod(collectionType).CreateDelegate(delegateType);
-
-				return Wrap(enumerableInterface, printer);
-			}
-
-			return obj => Console.Write(obj.ToString());
-		}
-
-		private static Action<object> Wrap(Type genericType, object actionObj)
-		{
-			var wrapper = typeof(ObjectPrinter)
-				.GetMethod(nameof(WrapGeneric), BindingFlags.Static | BindingFlags.NonPublic)!
-				.MakeGenericMethod(genericType);
-			return (Action<object>)wrapper.Invoke(null, [actionObj])!;
-		}
-
-		private static Action<object> WrapGeneric<T>(object actionObj)
-		{
-			var action = (Action<T>)actionObj;
-			return o => action((T)o);
-		}
-
-		private static void PrintGenericCollection<T>(IEnumerable<T> collection)
-		{
-			bool first = true;
-			Console.Write('[');
-			foreach (var item in collection)
-			{
-				if (first == false) Console.Write(", ");
-				first = false;
-
-				Console.Write(item?.ToString() ?? "Null");
-			}
-			Console.Write(']');
 		}
 	}
 
@@ -163,10 +95,9 @@ public sealed class ConsoleMonitoringSystem : IMonitoringSystem
 			return color;
 		}
 
-		public static ConsoleColor ColorForGuid(Guid id)
+		public static ConsoleColor ColorForByte(byte number)
 		{
-			var bytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref id, 1));
-			var color = (ConsoleColor)(bytes[0] & 0xF);
+			var color = (ConsoleColor)(number & 0xF);
 			return NormalizeColor(color);
 		}
 

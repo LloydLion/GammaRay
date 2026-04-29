@@ -38,7 +38,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 
 	public void Initialize()
 	{
-		_synchronizationContext = SynchronizationContext.Current;
+		_synchronizationContext = SynchronizationContext.Current ?? new();
 		InitiateNetworkIdentityRefresh();
 		NetworkChange.NetworkAddressChanged += NetworkChanged;
 	}
@@ -61,28 +61,32 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 		if (Interlocked.Exchange(ref _isRefreshing, 1) == 1)
 			return false;
 
-		using var context = new MonitoringContext("NetworkIdentityRefresh", _time, _monitoringSystem);
-		using var report = context.NewReport<Report>();
-		report.IdentifierName = GetType().Name;
-
-		try
+		SynchronizationContext.Post(_ =>
 		{
-			_identity = FetchCurrentNetworkIdentity(context);
-			_lastRefresh = DateTime.UtcNow;
+			using var context = new MonitoringContext("NetworkIdentityRefresh", _time, _monitoringSystem);
+			using var report = context.NewReport<Report>();
+			report.IdentifierName = GetType().Name;
 
-			foreach (var subscriber in _subscribers)
-				subscriber.Call();
+			try
+			{
+				_identity = FetchCurrentNetworkIdentity(context);
+				_lastRefresh = DateTime.UtcNow;
 
-			report.NewNetworkIdentity = CurrentIdentity;
-		}
-		catch (Exception ex)
-		{
-			report.Exception = ex;
-		}
-		finally
-		{
-			_isRefreshing = 0;
-		}
+				foreach (var subscriber in _subscribers)
+					subscriber.Call();
+
+				report.NewNetworkIdentity = CurrentIdentity;
+			}
+			catch (Exception ex)
+			{
+				report.Exception = ex;
+			}
+			finally
+			{
+				_isRefreshing = 0;
+			}
+
+		}, null);
 
 		return true;
 	}
