@@ -84,45 +84,49 @@ public sealed class SOCKS5InboundDriver(
 
 			try
 			{
+				RequestContext requestContext;
+
 				var now = _owner._time.GetUtcNow().UtcDateTime;
 				using var monitoringContext = new MonitoringContext("Connection", now, _owner._monitoringSystem);
-				using var report = monitoringContext.NewReport<Report>();
-				report.RemoteEndPoint = (IPEndPoint)client.RemoteEndPoint!;
+				using (var report = monitoringContext.NewReport<Report>())
+				{
+					report.RemoteEndPoint = (IPEndPoint)client.RemoteEndPoint!;
 
-				var clientHello = await SocksClientHelloMessage.ReadMessageFromSocketAsync(client, messageBuffer);
+					var clientHello = await SocksClientHelloMessage.ReadMessageFromSocketAsync(client, messageBuffer);
 
-				var serverHello = new SocksServerHelloMessage(
-					clientHello.SupportedAuthMethods.Span.Contains(SocksAuthMethod.NoAuth) == false ? SocksAuthMethod.Invalid : SocksAuthMethod.NoAuth
-				);
-				serverHello.Serialize(messageBuffer);
-				await client.SendAsync(messageBuffer[..SocksServerHelloMessage.FixedBinLength]);
+					var serverHello = new SocksServerHelloMessage(
+						clientHello.SupportedAuthMethods.Span.Contains(SocksAuthMethod.NoAuth) == false ? SocksAuthMethod.Invalid : SocksAuthMethod.NoAuth
+					);
+					serverHello.Serialize(messageBuffer);
+					await client.SendAsync(messageBuffer[..SocksServerHelloMessage.FixedBinLength]);
 
-				if (serverHello.ChosenMethod != SocksAuthMethod.NoAuth)
-					return;
+					if (serverHello.ChosenMethod != SocksAuthMethod.NoAuth)
+						return;
 
-				await client.ReceiveAsync(Array.Empty<byte>()); // wait for request
+					await client.ReceiveAsync(Array.Empty<byte>()); // wait for request
 
-				var request = await SocksClientRequestMessage.ReadMessageFromSocketAsync(client, messageBuffer);
-				var materializedAddress = MaterializeAddress(request); // buffer will be reused, so we need to materialize the address before it gets overwritten
-				var endPoint = new WebEndPoint(materializedAddress, request.Port, TransportType.StreamBased);
-				report.AddressType = request.AddressType;
-				report.DestinationEndPoint = endPoint;
+					var request = await SocksClientRequestMessage.ReadMessageFromSocketAsync(client, messageBuffer);
+					var materializedAddress = MaterializeAddress(request); // buffer will be reused, so we need to materialize the address before it gets overwritten
+					var endPoint = new WebEndPoint(materializedAddress, request.Port, TransportType.StreamBased);
+					report.AddressType = request.AddressType;
+					report.DestinationEndPoint = endPoint;
 
-				var reply = new SocksServerReplyMessage(
-					request.Command == SocksClientCommand.Connect ? SocksReplyCode.Succeeded : SocksReplyCode.CommandNotSupported,
-					_myAddressType, _myAddress, _myPort
-				);
+					var reply = new SocksServerReplyMessage(
+						request.Command == SocksClientCommand.Connect ? SocksReplyCode.Succeeded : SocksReplyCode.CommandNotSupported,
+						_myAddressType, _myAddress, _myPort
+					);
 
-				var written = reply.Serialize(messageBuffer);
-				await client.SendAsync(messageBuffer[..written]);
+					var written = reply.Serialize(messageBuffer);
+					await client.SendAsync(messageBuffer[..written]);
 
-				if (reply.Code != SocksReplyCode.Succeeded)
-					return;
+					if (reply.Code != SocksReplyCode.Succeeded)
+						return;
 
-				var incomingFlow = new SocketBasedStreamDataFlow(client);
-				var context = new RequestContext(endPoint, incomingFlow, now, monitoringContext);
+					var incomingFlow = new SocketBasedStreamDataFlow(client);
+					requestContext = new RequestContext(endPoint, incomingFlow, now, monitoringContext);
+				}
 
-				await _requestCallback!.Invoke(this, context);
+				await _requestCallback!.Invoke(this, requestContext);
 			}
 			catch (Exception) { }
 			finally
@@ -147,14 +151,14 @@ public sealed class SOCKS5InboundDriver(
 				_ => throw new NotSupportedException($"Unsupported address type {request.AddressType}")
 			});
 		}
+	}
 
-		public class Report() : SystemReport(nameof(SOCKS5InboundDriver))
-		{
-			public ReportProperty<IPEndPoint> RemoteEndPoint { private get; set => SetProperty(ref field, value.Value); }
+	public class Report() : SystemReport(nameof(SOCKS5InboundDriver))
+	{
+		public ReportProperty<IPEndPoint> RemoteEndPoint { get; set => SetProperty(ref field, value.Value); }
 
-			public ReportProperty<SocksAddressType> AddressType { private get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<SocksAddressType> AddressType { get; set => SetProperty(ref field, value.Value); }
 
-			public ReportProperty<WebEndPoint> DestinationEndPoint { private get; set => SetProperty(ref field, value.Value); }
-		}
+		public ReportProperty<WebEndPoint> DestinationEndPoint { get; set => SetProperty(ref field, value.Value); }
 	}
 }

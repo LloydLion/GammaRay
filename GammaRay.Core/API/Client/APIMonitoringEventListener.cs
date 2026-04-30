@@ -47,7 +47,6 @@ public sealed class APIMonitoringEventListener(IMonitoringSystem _targetSystem, 
 
 
 					var typeFullName = reader.ReadStringToEnd(Encoding.UTF8);
-					Console.WriteLine($"New report: {contextId} {typeFullName}");
 					var reportType = typeof(GammaRayAPIClient).Assembly.GetType(typeFullName, false)
 						?? throw new Exception($"Invalid event: unknown report type {typeFullName}");
 

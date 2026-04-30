@@ -99,43 +99,47 @@ public sealed class HTTPInboundDriver(
 						return;
 
 					// -- Prepare to processing
+					RequestContext requestContext;
+
 					var now = _owner._time.GetUtcNow().UtcDateTime;
 					using var monitoring = new MonitoringContext("Connection", now, _owner._monitoringSystem);
-					using var report = monitoring.NewReport<Report>();
-					report.RemoteEndPoint = (IPEndPoint)clientContext.Socket.RemoteEndPoint!;
+					using (var report = monitoring.NewReport<Report>())
+					{
+						report.RemoteEndPoint = (IPEndPoint)clientContext.Socket.RemoteEndPoint!;
 
-					// -- Read HTTP header for proxy
-					var rawHeader = HttpMessageHeader.ReadRawHeader(clientContext.Stream);
-					if (rawHeader.Length == 0)
-						return;
-					var header = HttpRequestHeader.Parse(rawHeader);
-					var destinationEndPoint = header.Uri.EndPoint;
-					destinationEndPoint ??= GenericWebEndPoint.Parse(header.Headers.TryGetSingle("Host")
-						?? throw new Exception("Client do not specified destination host"));
-					report.DestinationEndPoint = destinationEndPoint.Value;
+						// -- Read HTTP header for proxy
+						var rawHeader = HttpMessageHeader.ReadRawHeader(clientContext.Stream);
+						if (rawHeader.Length == 0)
+							return;
+						var header = HttpRequestHeader.Parse(rawHeader);
+						var destinationEndPoint = header.Uri.EndPoint;
+						destinationEndPoint ??= GenericWebEndPoint.Parse(header.Headers.TryGetSingle("Host")
+							?? throw new Exception("Client do not specified destination host"));
+						report.DestinationEndPoint = destinationEndPoint.Value;
 
-					// -- Create request context
-					var requestType = header.Method == "CONNECT" ? HttpProxyRequestType.Connect : HttpProxyRequestType.HTTP;
-					var requestContext = new RequestContext(
-						new WebEndPoint(destinationEndPoint.Value, TransportType.StreamBased),
-						FormIncomingDataFlow(clientContext, requestType),
-						now, monitoring
-					);
+						// -- Create request context
+						var requestType = header.Method == "CONNECT" ? HttpProxyRequestType.Connect : HttpProxyRequestType.HTTP;
+						requestContext = new RequestContext(
+							new WebEndPoint(destinationEndPoint.Value, TransportType.StreamBased),
+							FormIncomingDataFlow(clientContext, requestType),
+							now, monitoring
+						);
 
-					// -- Write response
-					await clientContext.Stream.WriteAsync(ConnectionEstablishedMessage);
+						// -- Write response
+						await clientContext.Stream.WriteAsync(ConnectionEstablishedMessage);
+
+						// -- Make connection decision
+						shouldKeepConnection = false;
+						var connectionHeaderValue = header.Headers.TryGetSingle(ProxyConnectionHeader);
+						if (string.Equals(connectionHeaderValue, "keep-alive", StringComparison.OrdinalIgnoreCase))
+						{
+							shouldKeepConnection = true;
+						}
+						report.ShouldKeepConnectionAlive = shouldKeepConnection;
+					}
 
 					// -- Call callback
 					await CallCallback(requestContext);
-
-					// -- Make connection decision
-					shouldKeepConnection = false;
-					var connectionHeaderValue = header.Headers.TryGetSingle(ProxyConnectionHeader);
-					if (string.Equals(connectionHeaderValue, "keep-alive", StringComparison.OrdinalIgnoreCase))
-					{
-						shouldKeepConnection = true;
-					}
-					report.ShouldKeepConnectionAlive = shouldKeepConnection;
 				}
 				while (shouldKeepConnection);
 			}
@@ -182,14 +186,14 @@ public sealed class HTTPInboundDriver(
 
 		private ValueTask CallCallback(RequestContext requestContext) => _requestCallback!.Invoke(this, requestContext);
 
+	}
 
-		public class Report() : SystemReport(nameof(HTTPInboundDriver))
-		{
-			public ReportProperty<IPEndPoint> RemoteEndPoint { get; set => SetProperty(ref field, value.Value); }
+	public class Report() : SystemReport(nameof(HTTPInboundDriver))
+	{
+		public ReportProperty<IPEndPoint> RemoteEndPoint { get; set => SetProperty(ref field, value.Value); }
 
-			public ReportProperty<GenericWebEndPoint> DestinationEndPoint { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<GenericWebEndPoint> DestinationEndPoint { get; set => SetProperty(ref field, value.Value); }
 
-			public ReportProperty<bool> ShouldKeepConnectionAlive { get; set => SetProperty(ref field, value.Value); }
-		}
+		public ReportProperty<bool> ShouldKeepConnectionAlive { get; set => SetProperty(ref field, value.Value); }
 	}
 }

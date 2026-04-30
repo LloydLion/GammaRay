@@ -9,36 +9,86 @@ using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils.FileSystem;
+using GammaRay.Client.TUI;
 using Microsoft.Extensions.Options;
 using Nito.AsyncEx;
 
-var cancelWait = new TaskCompletionSource();
-Console.CancelKeyPress += (s, e) => { cancelWait.SetResult(); e.Cancel = true; };
+var cancelWait = new CancellationTokenSource();
+Console.CancelKeyPress += (s, e) => { cancelWait.Cancel(); e.Cancel = true; };
 
 AsyncContext.Run(async () =>
 {
-	var apiClient = new GammaRayAPIClient(TimeProvider.System, Options.Create(new GammaRayAPIClient.Options()));
-	var networkDriver = new NetworkAPIEndPointDriver();
+	try
+	{
+		Console.WriteLine("╔══════════════════════════════════════════════════════════════════════════════╗");
+		Console.WriteLine("║ GammaRay TUI Client                                                          ║");
+		Console.WriteLine("╚══════════════════════════════════════════════════════════════════════════════╝");
+		Console.WriteLine();
 
-	Console.ReadKey();
+		var apiClient = new GammaRayAPIClient(TimeProvider.System, Options.Create(new GammaRayAPIClient.Options()));
+		var networkDriver = new NetworkAPIEndPointDriver();
 
-	await apiClient.ConnectAsync(networkDriver, "127.0.0.3:5000");
+		Console.Write("Enter server address (default: 127.0.0.3:5000): ");
+		var serverAddress = Console.ReadLine();
+		if (string.IsNullOrWhiteSpace(serverAddress))
+			serverAddress = "127.0.0.3:5000";
 
-	var version = await apiClient.RequestAPIVVersionAsync();
-	Console.WriteLine($"Server API version {version}");
+		Console.WriteLine("\nConnecting to server...");
+		await apiClient.ConnectAsync(networkDriver, serverAddress);
+		Console.WriteLine("✓ Connected!");
 
-	var settingsContent = await apiClient.RequestReadSettingsAsync();
-	Console.WriteLine(settingsContent);
+		Console.WriteLine("Checking API version...");
+		var version = await apiClient.RequestAPIVVersionAsync();
+		Console.WriteLine($"✓ Server API version: {version}");
 
-	var serializerOptionsSource = LoadSettings(settingsContent);
-	var consoleMonitoring = new ConsoleMonitoringSystem();
-	var apiMonitoringEventListener = new APIMonitoringEventListener(consoleMonitoring, serializerOptionsSource);
+		Console.WriteLine("Loading server settings...");
+		var settingsContent = await apiClient.RequestReadSettingsAsync();
 
-	apiClient.AddEventListener(apiMonitoringEventListener);
+		var serializerOptionsSource = LoadSettings(settingsContent);
 
-	await apiClient.ControlMonitoringAsync(APIConstants.MonitoringMode.EnabledWithReportProperties);
 
-	await cancelWait.Task;
+		var tuiMonitoring = new ConnectionTrackingMonitoringSystem(redrawUI, TimeProvider.System);
+		var apiMonitoringEventListener = new APIMonitoringEventListener(tuiMonitoring, serializerOptionsSource);
+
+		apiClient.AddEventListener(apiMonitoringEventListener);
+
+		Console.WriteLine("Enabling monitoring...");
+		await apiClient.ControlMonitoringAsync(APIConstants.MonitoringMode.EnabledWithReportProperties);
+		Console.WriteLine("✓ Monitoring enabled!");
+
+		redrawUI(tuiMonitoring);
+
+		static void redrawUI(ConnectionTrackingMonitoringSystem tracking)
+		{
+			Console.Clear();
+			Console.WriteLine("Online connections:");
+			foreach (var connection in tracking.Connections.Values)
+			{
+				Console.Write($"[{connection.InboundDriver}:{connection.EndPoint}] -> [{connection.Destination}]");
+				if (connection.RoutingResult is not null)
+					Console.Write($" {connection.RoutingResult.Value.IAP.Name}/{connection.RoutingResult.Value.ChannelName}");
+
+				if (connection.CurrentStatus is OnlineConnection.Status.Closed)
+					Console.Write($" CLOSED");
+				Console.WriteLine();
+			}
+		}
+
+		await Task.Delay(-1, cancelWait.Token);
+
+		Console.WriteLine("\nDisconnecting...");
+		await apiClient.DisconnectAsync();
+		Console.WriteLine("✓ Disconnected");
+	}
+	catch (Exception ex)
+	{
+		Console.ForegroundColor = ConsoleColor.Red;
+		Console.WriteLine($"\n✗ Error: {ex.Message}");
+		if (ex.InnerException is not null)
+			Console.WriteLine($"  Details: {ex.InnerException.Message}");
+		Console.ResetColor();
+		Console.ReadKey();
+	}
 });
 
 static MonitoringSerializerOptionsSource LoadSettings(string settingsContent)
