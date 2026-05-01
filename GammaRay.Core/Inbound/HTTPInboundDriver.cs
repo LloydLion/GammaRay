@@ -108,7 +108,7 @@ public sealed class HTTPInboundDriver(
 						report.RemoteEndPoint = (IPEndPoint)clientContext.Socket.RemoteEndPoint!;
 
 						// -- Read HTTP header for proxy
-						var rawHeader = HttpMessageHeader.ReadRawHeader(clientContext.Stream);
+						var rawHeader = await HttpMessageHeader.ReadRawHeaderAsync(clientContext.Socket);
 						if (rawHeader.Length == 0)
 							return;
 						var header = HttpRequestHeader.Parse(rawHeader);

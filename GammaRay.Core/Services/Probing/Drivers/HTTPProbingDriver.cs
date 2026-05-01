@@ -55,7 +55,7 @@ public sealed class HTTPProbingDriver(TimeProvider _time) : IProbeDriver
 
 			await streamDataFlow.WriteAsync(binMessage, writingOptions);
 
-			var rawResponse = HttpMessageHeader.ReadRawHeader(streamDataFlow, readingOptions);
+			var rawResponse = await HttpMessageHeader.ReadRawHeaderAsync(streamDataFlow, readingOptions);
 			var response = HttpResponseHeader.Parse(rawResponse);
 			report.ResponseStatusCode = response.Code;
 			var isStatusCodeSatisfied = strongParameters.RequireNonErrorStatusCode is false || (response.Code / 100) is 1 or 2 or 3;
@@ -63,12 +63,12 @@ public sealed class HTTPProbingDriver(TimeProvider _time) : IProbeDriver
 			if (isStatusCodeSatisfied == false)
 				return (ProbeResult)(report.Result = new ProbeResult(ProbeResult.ProbeStatus.UnexceptedData, _time.GetElapsedTime(startTimestamp)));
 
-			var buffer = new byte[1024];
-			long totalLength = 0;
-			var data = HttpBodyReader.ReadBodyAsync(buffer, streamDataFlow, readingOptions with { Timeout = options.ContinuousDataTimeout }, response.Headers);
-			if (data is not null)
-				await foreach (var item in data) { totalLength += item.Length; }
-			report.TotalResponseBodyLength = totalLength;
+			//var buffer = new byte[1024];
+			//long totalLength = 0;
+			//var data = HttpBodyReader.ReadBodyAsync(buffer, streamDataFlow, readingOptions with { Timeout = options.ContinuousDataTimeout }, response.Headers);
+			//if (data is not null)
+			//	await foreach (var item in data) { totalLength += item.Length; }
+			//report.TotalResponseBodyLength = totalLength;
 
 			return (ProbeResult)(report.Result = new ProbeResult(ProbeResult.ProbeStatus.Success, _time.GetElapsedTime(startTimestamp)));
 		}

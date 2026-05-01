@@ -79,7 +79,7 @@ internal class Program
 				.AddSingleton<ConsoleMonitoringSystem>()
 				.AddSingleton<APIBasedMonitoringSystem>()
 				.AddSingleton<IMonitoringSystem, MultiHeadMonitoringSystem>(sp => new([
-					sp.GetRequiredService<ConsoleMonitoringSystem>(),
+					//sp.GetRequiredService<ConsoleMonitoringSystem>(),
 					sp.GetRequiredService<APIBasedMonitoringSystem>()
 				]))
 				.AddSingleton<MonitoringSerializerOptionsSource>()

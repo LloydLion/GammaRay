@@ -1,4 +1,6 @@
 using GammaRay.Core.Network.Flow;
+using System.Buffers;
+using System.Net.Sockets;
 using System.Text;
 
 namespace GammaRay.Core.Protocols.HTTP;
@@ -6,8 +8,10 @@ namespace GammaRay.Core.Protocols.HTTP;
 public abstract class HttpMessageHeader(Version version, HttpHeadersCollection headers)
 {
 	public const string Terminator = "\r\n\r\n";
-	public static readonly int ASCIITerminator = BitConverter.ToInt32(Encoding.UTF8.GetBytes(Terminator));
+	public static readonly byte[] BinaryTerminator = Encoding.UTF8.GetBytes(Terminator);
 	public static readonly Version HTTP11 = new(1, 1);
+	private static readonly ArrayPool<byte> ReadArrayPool = ArrayPool<byte>.Create();
+
 
 	public Version Version { get; } = version;
 
@@ -53,36 +57,101 @@ public abstract class HttpMessageHeader(Version version, HttpHeadersCollection h
 
 	public abstract string Serialize();
 
-	public static string[] ReadRawHeader(Stream stream) => ReadRawHeader(stream.ReadByte);
-
-	public static string[] ReadRawHeader(IReadOnlyStreamDataFlow stream, DataFlowReadingOptions readingOptions = default) =>
-		ReadRawHeader(() => stream.ReadByte(readingOptions));
-
-	public static string[] ReadRawHeader(Func<int> syncByteReader)
+	public static ValueTask<string[]> ReadRawHeaderAsync(Socket socket) => ReadRawHeaderAsync((output, peekOnly, socket) =>
 	{
-		var ms = new MemoryStream();
+		return socket.ReceiveAsync(output, peekOnly ? SocketFlags.Peek : SocketFlags.None);
+	}, socket);
 
-		while (true)
+	public static ValueTask<string[]> ReadRawHeaderAsync(
+		IReadOnlyStreamDataFlow dataFlow,
+		DataFlowReadingOptions readingOptions = default
+	) => ReadRawHeaderAsync((output, peekOnly, ctx) =>
+	{
+		var options = ctx.readingOptions with { PeekOnly = peekOnly };
+		return ctx.dataFlow.ReadAsync(output, options);
+	}, (dataFlow, readingOptions));
+
+	public static async ValueTask<string[]> ReadRawHeaderAsync<TContext>(
+		// output, peekOnly, context -> readBytes
+		Func<Memory<byte>, bool, TContext, ValueTask<int>> reader, TContext context
+	)
+	{
+		List<byte[]>? filledBuffers = null;
+		byte[]? lastBuffer = null;
+		try
 		{
-			var readByte = syncByteReader();
+			int readInLastBuffer = 0;
+			int matchedTerminatorBytes = 0;
 
-			if (readByte == -1)
-				break;
+			while (true)
+			{
+				if (filledBuffers is { Count: 64 })
+					throw new Exception("Too big header");
 
-			ms.WriteByte((byte)readByte);
+				byte[] currentReadBuffer = ReadArrayPool.Rent(1024 * 16);
 
-			if (ms.Length < 4)
-				continue;
+				if (lastBuffer is not null)
+				{
+					if (filledBuffers is null) filledBuffers = new();
+					filledBuffers.Add(lastBuffer);
+				}
+				lastBuffer = currentReadBuffer;
 
-			var buffer = ms.GetBuffer();
-			var usedBufferSegment = buffer.AsSpan(0, (int)ms.Length);
-			var maybeTerminator = BitConverter.ToInt32(usedBufferSegment[^4..]);
-			if (maybeTerminator == ASCIITerminator)
-				break;
+				int usedInBuffer = 0;
+
+				while (usedInBuffer < currentReadBuffer.Length)
+				{
+					var read = await reader(currentReadBuffer.AsMemory(usedInBuffer..), true, context);
+					if (read == 0)
+						throw new EndOfStreamException();
+
+					for (int i = usedInBuffer; i < usedInBuffer + read; i++)
+						if (currentReadBuffer[i] == BinaryTerminator[matchedTerminatorBytes])
+						{
+							matchedTerminatorBytes++;
+							if (matchedTerminatorBytes == BinaryTerminator.Length)
+							{
+								readInLastBuffer = i + 1;
+								await reader(currentReadBuffer.AsMemory(usedInBuffer..readInLastBuffer), false, context);
+								goto exit;
+							}
+							// END!
+						}
+						else matchedTerminatorBytes = 0;
+
+					await reader(currentReadBuffer.AsMemory(usedInBuffer..(usedInBuffer + read)), false, context);
+
+					usedInBuffer += read;
+				}
+			}
+
+		exit:
+
+			int charCount = Encoding.UTF8.GetCharCount(lastBuffer.AsSpan(..readInLastBuffer));
+			if (filledBuffers is not null)
+				foreach (var subBuffer in filledBuffers)
+					charCount += Encoding.UTF8.GetCharCount(subBuffer);
+
+			var output = string.Create(charCount, 0, (output, _) =>
+			{
+				int wroteChars = 0;
+				if (filledBuffers is not null)
+					foreach (var subBuffer in filledBuffers)
+						wroteChars += Encoding.UTF8.GetChars(subBuffer, output[wroteChars..]);
+			
+				Encoding.UTF8.GetChars(lastBuffer.AsSpan(..readInLastBuffer), output[wroteChars..]);
+			});
+
+			return output.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 		}
-
-		var raw = Encoding.UTF8.GetString(ms.GetBuffer().AsSpan(0, (int)ms.Length));
-		return raw.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+		finally
+		{
+			if (lastBuffer is not null)
+				ReadArrayPool.Return(lastBuffer);
+			if (filledBuffers is not null)
+				foreach (var subBuffer in filledBuffers)
+					ReadArrayPool.Return(subBuffer);
+		}
 	}
 }
 

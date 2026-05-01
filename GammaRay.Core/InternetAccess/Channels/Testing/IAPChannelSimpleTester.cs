@@ -62,7 +62,7 @@ public sealed class IAPChannelSimpleTester(
 
 				await dataFlow.WriteAsync(binMessage, new DataFlowWritingOptions(), cancellationToken);
 
-				var rawResponse = HttpMessageHeader.ReadRawHeader(dataFlow, new DataFlowReadingOptions());
+				var rawResponse = await HttpMessageHeader.ReadRawHeaderAsync(dataFlow, new DataFlowReadingOptions());
 				var response = HttpResponseHeader.Parse(rawResponse);
 				if (response.Code != 204)
 					return new(_time.GetElapsedTime(start), TestStatus.UnexceptedData);

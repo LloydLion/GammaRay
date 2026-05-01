@@ -27,7 +27,7 @@ capabilityClasses:
       driver: HTTP
       parameters:
         useTLS: true
-        path: /
+        path: ""
         method: GET
   HTTP:
     detectionRules:
@@ -37,7 +37,7 @@ capabilityClasses:
       driver: HTTP
       parameters:
         useTLS: false
-        path: /
+        path: ""
         method: GET
 
 endpointRoutingConfigurations:
