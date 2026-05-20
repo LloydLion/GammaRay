@@ -11,6 +11,7 @@ public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDis
 	private readonly Dictionary<Guid, OnlineConnection> _connections = [];
 	private readonly HashSet<Guid> _toDelete = [];
 	private readonly ITimer _deleteTimer;
+	private bool _deleteTimerScheduled = false;
 	private readonly SynchronizationContext _synchronization;
 
 
@@ -35,8 +36,11 @@ public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDis
 		if (_connections.TryGetValue(context.Id, out var connection))
 		{
 			connection.CurrentStatus = OnlineConnection.Status.Closed;
-			_toDelete.Add(connection.Id);
-			_deleteTimer.Change(TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
+			if (_deleteTimerScheduled == false)
+			{
+				_deleteTimer.Change(TimeSpan.FromMilliseconds(500), Timeout.InfiniteTimeSpan);
+				_deleteTimerScheduled = true;
+			}
 		}
 
 		Update();
@@ -108,10 +112,28 @@ public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDis
 
 	private void SynchronizedDeleteTimerCallback(object? _)
 	{
-		foreach (var id in _toDelete)
-			_connections.Remove(id);
+		bool shouldReschedule = false;
+
+		foreach (var connection in _connections.Values)
+			if (connection.CurrentStatus == OnlineConnection.Status.Closed)
+			{
+				connection.TTL -= 1;
+				if (connection.TTL <= 0)
+					_toDelete.Add(connection.Id);
+				else shouldReschedule = true;
+			}
+
+		bool shouldUpdate = _toDelete.Any();
+		foreach (var item in _toDelete)
+			_connections.Remove(item);
 		_toDelete.Clear();
-		Update();
+
+		if (shouldUpdate)
+			Update();
+
+		if (shouldReschedule)
+			_deleteTimer.Change(TimeSpan.FromMilliseconds(500), Timeout.InfiniteTimeSpan);
+		else _deleteTimerScheduled = false;
 	}
 
 	public void Dispose()

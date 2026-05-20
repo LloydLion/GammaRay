@@ -7,6 +7,7 @@ using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Channels;
 
 namespace GammaRay.Core.InternetAccess.Channels.Drivers;
 
@@ -20,7 +21,7 @@ public sealed class SOCKS5ChannelDriver : IChannelDriver
 	private readonly ArrayPool<byte> _pool = ArrayPool<byte>.Create();
 
 
-	public async ValueTask<IOpenChannel?> TryOpenChannelAsync(IAPChannel channel, WebEndPoint targetEndPoint)
+	public async ValueTask<ChannelOpeningResult> TryOpenChannelAsync(IAPChannel channel, WebEndPoint targetEndPoint)
 	{
 		var messageBuffer = _pool.Rent(256);
 		var addressBuffer = _pool.Rent(256);
@@ -32,30 +33,37 @@ public sealed class SOCKS5ChannelDriver : IChannelDriver
 		{
 			socket = await CreateSocket(channel);
 
-			if (await PerformHandshake(messageBuffer, socket))
-				return null;
+			await PerformHandshake(messageBuffer, socket, channel);
 
-			await RequestServerForConnection(targetEndPoint, messageBuffer, addressBuffer, socket);
+			var reply = await RequestServerForConnection(targetEndPoint, messageBuffer, addressBuffer, socket);
+			if (reply.Code != SocksReplyCode.Succeeded)
+				return ChannelOpeningResult.ConnectionError();
 
 			var flow = new SocketBasedStreamDataFlow(socket);
 			isSuccess = true;
-			return new OpenChannel(flow, socket);
+			return ChannelOpeningResult.Success(new OpenChannel(flow, socket));
 		}
-		catch
+		catch (Exception ex)
 		{
-			return null;
+			return ChannelOpeningResult.Exception(ex);
 		}
 		finally
 		{
 			_pool.Return(messageBuffer);
 			_pool.Return(addressBuffer);
 
-			if (isSuccess == false)
-				socket?.Dispose();
+			if (isSuccess == false && socket is not null)
+			{
+				try { await socket.DisconnectAsync(false); }
+				catch (Exception) { }
+				socket.Dispose();
+			}
 		}
 	}
 
-	private static async Task RequestServerForConnection(WebEndPoint targetEndPoint, byte[] messageBuffer, byte[] addressBuffer, Socket socket)
+	private static async ValueTask<SocksServerReplyMessage> RequestServerForConnection(
+		WebEndPoint targetEndPoint, byte[] messageBuffer, byte[] addressBuffer, Socket socket
+	)
 	{
 		SocksAddressType addressType;
 		ReadOnlyMemory<byte> address;
@@ -83,17 +91,17 @@ public sealed class SOCKS5ChannelDriver : IChannelDriver
 		var requestMessage = new SocksClientRequestMessage(SocksClientCommand.Connect, addressType, address, targetEndPoint.Port);
 		var requestMessageLen = requestMessage.Serialize(messageBuffer);
 		await socket.SendAsync(messageBuffer.AsMemory(0, requestMessageLen), SocketFlags.None);
-		await SocksServerReplyMessage.ReadMessageFromSocketAsync(socket, messageBuffer);
+
+		return await SocksServerReplyMessage.ReadMessageFromSocketAsync(socket, messageBuffer);
 	}
 
-	private static async ValueTask<bool> PerformHandshake(byte[] messageBuffer, Socket socket)
+	private static async ValueTask PerformHandshake(byte[] messageBuffer, Socket socket, IAPChannel channel)
 	{
 		await socket.SendAsync(HelloMessageBin);
 		await socket.ReceiveExactAsync(messageBuffer.AsMemory(0, 2));
 		var serverHello = SocksServerHelloMessage.Deserialize(messageBuffer);
 		if (serverHello.ChosenMethod != SocksAuthMethod.NoAuth)
-			return true;
-		return false;
+			throw new Exception($"socks5://{channel.EndPoint} has no NoAuth auth method");
 	}
 
 	private static async ValueTask<Socket> CreateSocket(IAPChannel channel)

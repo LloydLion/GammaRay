@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GammaRay.Core.Services.Probing;
@@ -9,15 +8,14 @@ public sealed class ServiceIAPStatusConverter : JsonConverter<ServiceIAPStatus>
 {
 	public override ServiceIAPStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
 	{
-		if (reader.TokenType != JsonTokenType.Number)
-			throw new JsonException("Expected Number token for ServiceIAPStatus");
-
-		var ticks = reader.GetInt64();
-		return new ServiceIAPStatus(new TimeSpan(ticks));
+		var serializedForm = reader.GetString();
+		if (serializedForm is null)
+			return ServiceIAPStatus.Blocked;
+		return ServiceIAPStatus.Deserialize(serializedForm);
 	}
 
 	public override void Write(Utf8JsonWriter writer, ServiceIAPStatus value, JsonSerializerOptions options)
 	{
-		writer.WriteNumberValue(value.AverageProbeTime.Ticks);
+		writer.WriteStringValue(value.Serialize());
 	}
 }

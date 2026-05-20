@@ -24,6 +24,7 @@ public class MonitoringSerializerOptionsSource
 		JsonOptions.Converters.Add(new EndPointRoutingConfigurationConverter(_endPointRoutingConfigurationProvider));
 		JsonOptions.Converters.Add(new InternetAccessPointConverter(_internetAccessPointProvider));
 		JsonOptions.Converters.Add(new ServiceIAPStatusConverter());
+		JsonOptions.Converters.Add(new ProbeResultConverter());
 		JsonOptions.Converters.Add(new IPEndPointConverter());
 		JsonOptions.Converters.Add(new IAPChannelStatusConverter());
 		JsonOptions.Converters.Add(new ServiceStatusTableConverter(_internetAccessPointProvider));

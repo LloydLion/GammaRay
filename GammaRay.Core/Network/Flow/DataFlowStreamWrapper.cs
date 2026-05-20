@@ -4,14 +4,23 @@ namespace GammaRay.Core.Network.Flow;
 
 public sealed class DataFlowStreamWrapper : Stream
 {
-	private readonly IStreamDataFlow _dataFlow;
+	private IStreamDataFlow? _dataFlow;
 
+
+	public DataFlowStreamWrapper()
+	{
+		_dataFlow = null;
+	}
 
 	public DataFlowStreamWrapper(IStreamDataFlow dataFlow)
 	{
 		_dataFlow = dataFlow;
 	}
 
+
+	public IStreamDataFlow? UnderlyingDataFlow => _dataFlow;
+
+	public IStreamDataFlow RequiredUnderlyingDataFlow => _dataFlow ?? throw new InvalidOperationException("Data flow is not set");
 
 	public override bool CanRead => true;
 
@@ -51,26 +60,29 @@ public sealed class DataFlowStreamWrapper : Stream
 	public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
 	public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-		_dataFlow.ReadAsync(buffer, ReadingOptions, cancellationToken);
+		RequiredUnderlyingDataFlow.ReadAsync(buffer, ReadingOptions, cancellationToken);
 
 	public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-		_dataFlow.ReadAsync(buffer.AsMemory(offset, count), ReadingOptions, cancellationToken).AsTask();
+		RequiredUnderlyingDataFlow.ReadAsync(buffer.AsMemory(offset, count), ReadingOptions, cancellationToken).AsTask();
 
 	public override int Read(byte[] buffer, int offset, int count) =>
-		_dataFlow.Read(buffer.AsSpan(offset, count), ReadingOptions);
+		RequiredUnderlyingDataFlow.Read(buffer.AsSpan(offset, count), ReadingOptions);
 
 	public async override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
-		await _dataFlow.WriteAsync(buffer, WritingOptions, cancellationToken);
+		await RequiredUnderlyingDataFlow.WriteAsync(buffer, WritingOptions, cancellationToken);
 
 	public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-		_dataFlow.WriteAsync(buffer.AsMemory(offset, count), WritingOptions, cancellationToken).AsTask();
+		RequiredUnderlyingDataFlow.WriteAsync(buffer.AsMemory(offset, count), WritingOptions, cancellationToken).AsTask();
 
 	public override void Write(byte[] buffer, int offset, int count) =>
-		_dataFlow.WriteAsync(buffer.AsMemory(offset, count), WritingOptions).AsTask().Wait();
+		RequiredUnderlyingDataFlow.WriteAsync(buffer.AsMemory(offset, count), WritingOptions).AsTask().Wait();
 
 	public override long Seek(long offset, SeekOrigin origin)
 		=> throw new NotSupportedException();
 
 	public override void SetLength(long value)
 		=> throw new NotSupportedException();
+
+
+	public void ReInit(IStreamDataFlow? newDataFlow) => _dataFlow = newDataFlow;
 }

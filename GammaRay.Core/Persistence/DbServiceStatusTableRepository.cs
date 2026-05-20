@@ -40,7 +40,7 @@ public sealed class DbServiceStatusTableRepository(
 
 	protected override async ValueTask ExecuteWriteAsync(IDbConnection connection, Mutation item)
 	{
-		var tableJSON = JsonSerializer.Serialize(item.TableDecayable.Value.Table.ToDictionary(kv => kv.Key.Name, kv => kv.Value.AverageProbeTime.Ticks));
+		var tableJSON = JsonSerializer.Serialize(item.TableDecayable.Value.Table.ToDictionary(kv => kv.Key.Name, kv => kv.Value.Serialize()));
 		var model = new Model()
 		{
 			WebHost = item.TableDecayable.Value.Service.EndPoint.Host.Domain,
@@ -101,10 +101,10 @@ public sealed class DbServiceStatusTableRepository(
 			if (service is null)
 				return default;
 
-			var rawTable = JsonSerializer.Deserialize<Dictionary<string, long>>(m.TableData) ?? [];
+			var rawTable = JsonSerializer.Deserialize<Dictionary<string, string>>(m.TableData) ?? [];
 			var table = rawTable.ToDictionary(
 				kv => _internetAccessPointProvider.InternetAccessPoints[kv.Key],
-				kv => new ServiceIAPStatus(new TimeSpan(kv.Value))
+				kv => ServiceIAPStatus.Deserialize(kv.Value)
 			);
 
 			var statusTable = new ServiceStatusTable(service, table);

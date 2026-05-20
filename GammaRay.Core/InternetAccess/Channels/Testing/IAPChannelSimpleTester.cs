@@ -24,15 +24,15 @@ public sealed class IAPChannelSimpleTester(
 		try
 		{
 			var endPoint = new WebEndPoint(_uri.EndPoint!.Value, TransportType.StreamBased);
-			var openChannel = await _driverRegistry
+			var openingResult = await _driverRegistry
 				.ProvideDriver(channel.DriverName)
 				.TryOpenChannelAsync(channel, endPoint);
-			if (openChannel is null)
+			if (openingResult.Type != ChannelOpeningResult.ResultType.Success)
 				return new(_time.GetElapsedTime(start), TestStatus.SocketFailure);
 
-			await using (openChannel)
+			await using (openingResult)
 			{
-				var dataFlow = (IStreamDataFlow)openChannel.GetFlow();
+				var dataFlow = (IStreamDataFlow)openingResult.OpenChannel.GetFlow();
 
 				if (_uri.Schema == "https")
 				{

@@ -21,6 +21,8 @@ public sealed class OnlineConnection(MonitoringContext context, IPEndPoint endPo
 
 	public Guid Id => Context.Id;
 
+	public int TTL { get; set; } = 4;
+
 
 	public enum Status
 	{

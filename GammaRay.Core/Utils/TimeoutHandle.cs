@@ -20,11 +20,22 @@ public sealed class TimeoutHandle : IDisposable
 		CancellationToken cancellationToken = default
 	)
 	{
+		if (timeout <= TimeSpan.Zero && timeout != Timeout.InfiniteTimeSpan)
+			throw new ArgumentOutOfRangeException(nameof(timeout), timeout, "Timeout cannot be zero or negative, for infinite timeout use Timeout.InfiniteTimeSpan");
+
 		await _operationLock.WaitAsync(cancellationToken);
 
 		CancellationTokenRegistration? registration = null;
 		try
 		{
+			cancellationToken.ThrowIfCancellationRequested();
+
+			if (timeout == Timeout.InfiniteTimeSpan)
+			{
+				return await task(args, cancellationToken);
+			}
+
+
 			if (_cts.TryReset() == false)
 				_cts = new();
 			registration = cancellationToken.Register(_cts.Cancel);

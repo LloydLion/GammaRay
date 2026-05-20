@@ -1,3 +1,4 @@
+using GammaRay.Client.TUI;
 using GammaRay.Core.API;
 using GammaRay.Core.API.Client;
 using GammaRay.Core.InternetAccess;
@@ -9,7 +10,6 @@ using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils.FileSystem;
-using GammaRay.Client.TUI;
 using Microsoft.Extensions.Options;
 using Nito.AsyncEx;
 
@@ -62,11 +62,17 @@ AsyncContext.Run(async () =>
 		{
 			Console.Clear();
 			Console.WriteLine("Online connections:");
-			foreach (var connection in tracking.Connections.Values)
+			var orderedConnections = tracking.Connections.Values.OrderBy(s => s.RoutingResult, RoutingResultComparer.Instance);
+			foreach (var connection in orderedConnections)
 			{
 				Console.Write($"[{connection.InboundDriver}:{connection.EndPoint}] -> [{connection.Destination}]");
 				if (connection.RoutingResult is not null)
+				{
+					var color = (ConsoleColor)(connection.RoutingResult.GetHashCode() & 0xF);
+					Console.ForegroundColor = color;
 					Console.Write($" {connection.RoutingResult.Value.IAP.Name}/{connection.RoutingResult.Value.ChannelName}");
+					Console.ResetColor();
+				}
 
 				if (connection.CurrentStatus is OnlineConnection.Status.Closed)
 					Console.Write($" CLOSED");
@@ -132,5 +138,27 @@ public class DummyLocator : IFileSystemLocator
 	public Stream Open(string path, FileMode mode = FileMode.Open, FileAccess access = FileAccess.Read, FileShare share = FileShare.None)
 	{
 		return Stream.Null;
+	}
+}
+
+public class RoutingResultComparer : IComparer<(InternetAccessPoint IAP, string ChannelName)?>
+{
+	public static readonly RoutingResultComparer Instance = new();
+
+
+	public int Compare((InternetAccessPoint IAP, string ChannelName)? x, (InternetAccessPoint IAP, string ChannelName)? y)
+	{
+		if (x == y) // Including both null
+			return 0;
+		if (x is null)
+			return -1;
+		if (y is null)
+			return 1;
+
+		var IAPCompareResult = StringComparer.Ordinal.Compare(x.Value.IAP.Name, y.Value.IAP.Name);
+		if (IAPCompareResult is not 0)
+			return IAPCompareResult;
+
+		return StringComparer.Ordinal.Compare(x.Value.ChannelName, y.Value.ChannelName);
 	}
 }

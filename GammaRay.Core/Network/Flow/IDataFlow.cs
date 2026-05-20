@@ -1,6 +1,3 @@
-using System;
-using System.Threading.Tasks;
-
 namespace GammaRay.Core.Network.Flow;
 
 /*
@@ -33,12 +30,12 @@ static class DataFlowExtensions
 			switch ((other, flow))
 			{
 				case (IStreamDataFlow, IStreamDataFlow):
-					readDelegate = static (flow, buffer, cancel) => ((IStreamDataFlow)flow).ReadAsync(buffer, new(), cancel);
-					writeDelegate = static (flow, buffer, cancel) => ((IStreamDataFlow)flow).WriteAsync(buffer, new(), cancel);
+					readDelegate = static (flow, buffer, cancel) => ((IStreamDataFlow)flow).ReadAsync(buffer, new() { Timeout = Timeout.InfiniteTimeSpan }, cancel);
+					writeDelegate = static (flow, buffer, cancel) => ((IStreamDataFlow)flow).WriteAsync(buffer, new() { Timeout = Timeout.InfiniteTimeSpan }, cancel);
 					break;
 				case (IDatagramDataFlow, IDatagramDataFlow):
-					readDelegate = static (flow, buffer, cancel) => ((IDatagramDataFlow)flow).ReadDatagramAsync(buffer, new(), cancel);
-					writeDelegate = static (flow, buffer, cancel) => ((IDatagramDataFlow)flow).WriteDatagramAsync(buffer, new(), cancel);
+					readDelegate = static (flow, buffer, cancel) => ((IDatagramDataFlow)flow).ReadDatagramAsync(buffer, new() { Timeout = Timeout.InfiniteTimeSpan }, cancel);
+					writeDelegate = static (flow, buffer, cancel) => ((IDatagramDataFlow)flow).WriteDatagramAsync(buffer, new() { Timeout = Timeout.InfiniteTimeSpan }, cancel);
 					break;
 
 				case (IDatagramDataFlow, IStreamDataFlow) or (IStreamDataFlow, IDatagramDataFlow):

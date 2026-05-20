@@ -3,8 +3,6 @@ using System.Text.Json.Serialization;
 using GammaRay.Core.Services.Probing;
 using GammaRay.Core.Services;
 using GammaRay.Core.InternetAccess;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace GammaRay.Core.Monitoring.Converters;
 
@@ -36,8 +34,8 @@ public sealed class ServiceStatusTableConverter(InternetAccessPointProvider? _in
 						service = svc;
 						break;
 					case "table":
-						var raw = JsonSerializer.Deserialize<Dictionary<string, long>?>(ref reader, options) ?? throw new JsonException("'table' property was null");
-						table = raw.ToDictionary(kv => _internetAccessPointProvider.InternetAccessPoints[kv.Key], kv => new ServiceIAPStatus(new TimeSpan(kv.Value)));
+						var raw = JsonSerializer.Deserialize<Dictionary<string, string>?>(ref reader, options) ?? throw new JsonException("'table' property was null");
+						table = raw.ToDictionary(kv => _internetAccessPointProvider.InternetAccessPoints[kv.Key], kv => ServiceIAPStatus.Deserialize(kv.Value));
 						break;
 				}
 			}
@@ -55,7 +53,7 @@ public sealed class ServiceStatusTableConverter(InternetAccessPointProvider? _in
 		writer.WritePropertyName("service");
 		JsonSerializer.Serialize(writer, value.Service, options);
 		writer.WritePropertyName("table");
-		var dict = value.Table.ToDictionary(kv => kv.Key.Name, kv => kv.Value.AverageProbeTime.Ticks);
+		var dict = value.Table.ToDictionary(kv => kv.Key.Name, kv => kv.Value.Serialize());
 		JsonSerializer.Serialize(writer, dict, options);
 		writer.WriteEndObject();
 	}

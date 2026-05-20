@@ -6,7 +6,7 @@ using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
-using System.Reflection;
+using static GammaRay.Core.Services.Probing.ProbeResult;
 
 namespace GammaRay.Core.Services.Probing;
 
@@ -79,8 +79,9 @@ public sealed class ProbingManager(
 					continue;
 
 				// Subtract channel access time
-				var status = rawStatus.Value.Match(channelStatus.AverageAccessTime, (AAT, raw) =>
-					new ServiceIAPStatus(Math.Clamp(raw.AverageProbeTime - AAT, TimeSpan.Zero, TimeSpan.MaxValue)));
+				var correctedTime = rawStatus.Value.AverageProbeTime - channelStatus.AverageAccessTime;
+				if (correctedTime < TimeSpan.Zero) correctedTime = TimeSpan.Zero;
+				var status = rawStatus.Value with { AverageProbeTime = correctedTime };
 
 				rawStatusTable.Add(IAP, status);
 			}
@@ -116,27 +117,48 @@ public sealed class ProbingManager(
 		report.ChannelName = IAP.InverseChannels[channel];
 		var accMetric = TimeSpan.Zero;
 
+		bool wasBanned = false, wasSuccess = false;
+
 		int successInRow = 0;
 		for (int index = 0; index < _options.MaxProbeCount; index++)
 		{
-			await using var openChannel = await channelDriver.TryOpenChannelAsync(channel, endPoint);
-			if (openChannel is null)
+			bool threatAsSuccessProbe;
+			await using var openingResult = await channelDriver.TryOpenChannelAsync(channel, endPoint);
+			if (openingResult.Type is ChannelOpeningResult.ResultType.Exception)
 				return null;
-
-			var probeResult = await driver.ProbeAsync(openChannel.GetFlow(), endPoint, materializedParameters, _options.ProbeOptions, monitoringContext);
-			accMetric += probeResult.ProbeDuration;
-
-			if (probeResult.Status is ProbeResult.ProbeStatus.Success)
+			else if (openingResult.Type is ChannelOpeningResult.ResultType.ConnectionError)
+				threatAsSuccessProbe = false;
+			else // ChannelOpeningResult.ResultType.Success
 			{
+				var args = new ProbingArgs(openingResult.OpenChannel.GetFlow(), endPoint, materializedParameters, _options.ProbeOptions, _time, monitoringContext);
+				var probeResult = await driver.ProbeAsync(args);
+				accMetric += probeResult.ProbeDuration;
+
+				switch ((probeResult.L6Status, probeResult.L7Status))
+				{
+					case (CommunicationStatus.RemoteServerBan, CommunicationStatus.Skipped) or
+						 (CommunicationStatus.Success, CommunicationStatus.UnexceptedData or CommunicationStatus.RemoteServerBan):
+						wasBanned = true;
+						threatAsSuccessProbe = true;
+						break;
+
+					case (CommunicationStatus.Success or CommunicationStatus.Skipped, CommunicationStatus.Success):
+						wasSuccess = true;
+						threatAsSuccessProbe = true;
+						break;
+
+					default:
+						threatAsSuccessProbe = false;
+						break;
+				}
+			}
+
+			if (threatAsSuccessProbe)
 				successInRow++;
-				if (successInRow == _options.RequiredSuccessProbeCount)
-					goto success;
-			}
-			else
-			{
-				successInRow = 0;
-			}
-
+			else successInRow = 0;
+			if (successInRow == _options.RequiredSuccessProbeCount)
+				goto success;
+				
 			var ableBecomeSucceed = (_options.MaxProbeCount - index - 1) >= _options.RequiredSuccessProbeCount - successInRow;
 			if (ableBecomeSucceed == false)
 				break;
@@ -144,12 +166,17 @@ public sealed class ProbingManager(
 			await Task.Delay(_options.ProbeInterval);
 		}
 
-		report.Result = ServiceIAPStatus.Unavailable;
-		return ServiceIAPStatus.Unavailable;
+		report.Result = ServiceIAPStatus.Blocked;
+		return ServiceIAPStatus.Blocked;
 
 	success:
 
-		var result = new ServiceIAPStatus(accMetric / _options.RequiredSuccessProbeCount);
+		var type = (wasBanned, wasSuccess) switch
+		{
+			(true, false) => ServiceIAPStatus.StatusType.ServerSideBan,
+			_ => ServiceIAPStatus.StatusType.Available,
+		};
+		var result = new ServiceIAPStatus(type, accMetric / _options.RequiredSuccessProbeCount);
 		report.Result = result;
 		return result;
 	}

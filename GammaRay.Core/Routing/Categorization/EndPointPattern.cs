@@ -30,7 +30,7 @@ public class EndPointPattern(IReadOnlyList<string> webHostParts)
 			if (patternIndex >= WebHostParts.Count)
 				return false;
 
-			var partsEqual = WebHostParts[patternIndex] == part;
+			var partsEqual = WebHostParts[patternIndex].Equals(part, StringComparison.OrdinalIgnoreCase);
 
 			// If we are in begin of pattern and it is not matched -> cannot be matched at all
 			// Example: domain = sub.domain.net.tld   pattern = domain.tld

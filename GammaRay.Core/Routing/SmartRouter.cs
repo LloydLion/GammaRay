@@ -61,13 +61,14 @@ public sealed class SmartRouter(
 		if (statusTableDec is not null)
 		{
 			var table = statusTableDec.Value.Value;
+			var acceptableStatusType = table.CalculateAcceptableStatusType();
 			foreach (var blob in IAPChain.Blobs)
 			{
 				(InternetAccessPoint, IAPChannel)? bestChannel = null;
 				var bestMetric = TimeSpan.MaxValue;
 				foreach (var IAP in blob.Points)
 				{
-					if (table.Table.TryGetValue(IAP, out var serviceStatus) == false || serviceStatus.IsUnavailable)
+					if (table.Table.TryGetValue(IAP, out var serviceStatus) == false || serviceStatus.Type != acceptableStatusType)
 						continue;
 
 					var channelStatus = _channelPicker.PickBestChannel(IAP, networkProfile, channelRequirements);

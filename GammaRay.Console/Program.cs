@@ -55,6 +55,7 @@ internal class Program
 				.AddSingleton<IDriverRegistry<IChannelDriver>, ReflectionBasedDriverRegistry<IChannelDriver>>()
 
 				.AddSingleton<IProbeDriver, HTTPProbingDriver>()
+				.AddSingleton<IProbeDriver, MTProtoProbingDriver>()
 				.AddSingleton<IDriverRegistry<IProbeDriver>, ReflectionBasedDriverRegistry<IProbeDriver>>()
 
 #if UseWindowsComponents

@@ -28,12 +28,12 @@ namespace GammaRay.Core
 		{
 			IAPChannel channel = _router.MakeRoutingDecision(context);
 
-			await using IOpenChannel? openChannel =
+			await using var openingResult =
 				await _channelDriverRegistry
 					.ProvideDriver(channel.DriverName)
-					.TryOpenChannelAsync(channel, context.TargetEndPoint) ?? throw new Exception("Failed to open channel");
+					.TryOpenChannelAsync(channel, context.TargetEndPoint);
 
-			IDataFlow correspondingFlow = openChannel.GetFlow();
+			IDataFlow correspondingFlow = openingResult.OpenChannel.GetFlow();
 			IDataFlow incomingFlow = context.IncomingDataFlow;
 
 			await incomingFlow.JoinAsync(correspondingFlow);

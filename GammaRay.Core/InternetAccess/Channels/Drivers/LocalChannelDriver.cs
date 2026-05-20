@@ -10,7 +10,7 @@ namespace GammaRay.Core.InternetAccess.Channels.Drivers;
 [RecommendedDriverName("local")]
 public sealed class LocalChannelDriver : IChannelDriver
 {
-	public async ValueTask<IOpenChannel?> TryOpenChannelAsync(IAPChannel channel, WebEndPoint targetEndPoint)
+	public async ValueTask<ChannelOpeningResult> TryOpenChannelAsync(IAPChannel channel, WebEndPoint targetEndPoint)
 	{
 		try
 		{
@@ -27,13 +27,13 @@ public sealed class LocalChannelDriver : IChannelDriver
 						var socket = new Socket(addressFamily, SocketType.Stream, ProtocolType.Tcp);
 						await socket.ConnectAsync(ipEndPoint);
 						var flow = new SocketBasedStreamDataFlow(socket);
-						return new OpenChannel(flow, socket);
+						return ChannelOpeningResult.Success(new OpenChannel(flow, socket));
 					}
 				case TransportType.DatagramBased:
 					{
 						var socket = new Socket(addressFamily, SocketType.Dgram, ProtocolType.Udp);
 						var flow = new SocketBasedDatagramDataFlow(socket, ipEndPoint);
-						return new OpenChannel(flow, socket);
+						return ChannelOpeningResult.Success(new OpenChannel(flow, socket));
 					}
 				default:
 					throw new NotSupportedException();
@@ -41,7 +41,11 @@ public sealed class LocalChannelDriver : IChannelDriver
 		}
 		catch (SocketException)
 		{
-			return null;
+			return ChannelOpeningResult.ConnectionError();
+		}
+		catch (Exception ex)
+		{
+			return ChannelOpeningResult.Exception(ex);
 		}
 	}
 
