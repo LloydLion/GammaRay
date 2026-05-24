@@ -63,6 +63,8 @@ public ref struct BufferWriter(Span<byte> buffer, int initialUsedLength = 0)
 		UsedLength += wrote;
 	}
 
+	public void WriteBoolean(bool value) => WriteByte((byte)(value ? 1 : 0));
+
 	public void Advance(int advance)
 	{
 		UsedLength += advance;

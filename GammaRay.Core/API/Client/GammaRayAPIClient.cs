@@ -1,8 +1,6 @@
-using GammaRay.Core.Monitoring;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
 using System.Buffers;
-using System.Data.Common;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.WebSockets;
@@ -56,8 +54,18 @@ public class GammaRayAPIClient(TimeProvider time, IOptions<GammaRayAPIClient.Opt
 	public async ValueTask RequestWriteSettingsAsync(string settingsContent) =>
 		await Request(APIConstants.RequestType.UploadNewSettingsFile, (request, settingsContent) => Encoding.UTF8.GetBytes(settingsContent, request), (_, _) => 0, settingsContent);
 
-	public async ValueTask ControlMonitoringAsync(APIConstants.MonitoringMode monitoringMode) =>
-		await Request(APIConstants.RequestType.ControlMonitoring, (request, monitoringMode) => { request[0] = (byte)monitoringMode; return 1; }, (_, _) => 0, monitoringMode);
+	public async ValueTask<int> ControlMonitoringAsync(APIConstants.MonitoringMode monitoringMode, Memory<byte>? pendingEventBuffer = null) =>
+		await Request(
+			APIConstants.RequestType.ControlMonitoring,
+			(request, a) => { request[0] = (byte)a.monitoringMode; return 1; },
+			(response, a) =>
+			{
+				if (pendingEventBuffer is not null)
+					response.CopyTo(pendingEventBuffer.Value.Span);
+				return response.Length;
+			},
+			(monitoringMode, pendingEventBuffer)
+		);
 
 	public void AddEventListener(IAPIEventListener listener) => _eventListeners.Add(listener);
 

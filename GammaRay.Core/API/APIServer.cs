@@ -137,22 +137,26 @@ public sealed class APIServer
 			var wrote = Encoding.UTF8.GetBytes("Not defined MonitoringMode", p.IOBuffer.AsSpan(2..));
 			return ValueTask.FromResult(wrote + 1);
 		}
-
-		if (newMode == APIConstants.MonitoringMode.Disabled)
-		{
-			_monitoringSystem.StopTranslation(p.Sink);
-		}
 		else
 		{
-			_monitoringSystem.ConfigureTranslation(p.Sink, new()
+			int wrote = 0;
+			if (newMode == APIConstants.MonitoringMode.Disabled)
 			{
-				Enabled = true,
-				PropertyTranslationEnabled = newMode == APIConstants.MonitoringMode.EnabledWithReportProperties
-			});
-		}
+				_monitoringSystem.StopTranslation(p.Sink);
+			}
+			else
+			{
+				_monitoringSystem.ConfigureTranslation(p.Sink, new()
+				{
+					Enabled = true,
+					PropertyTranslationEnabled = newMode == APIConstants.MonitoringMode.EnabledWithReportProperties
+				});
+				wrote = _monitoringSystem.WritePendingMonitoringEvents(p.IOBuffer.AsSpan(2..));
+			}
 
-		p.IOBuffer[1] = (byte)APIConstants.ResponseCode.Success;
-		return ValueTask.FromResult(1);
+			p.IOBuffer[1] = (byte)APIConstants.ResponseCode.Success;
+			return ValueTask.FromResult(wrote + 1);
+		}
 	}
 
 	private async ValueTask<int> HandleGetCurrentSettingsFile(RequestContext p)

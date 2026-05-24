@@ -83,6 +83,7 @@ internal class Program
 					//sp.GetRequiredService<ConsoleMonitoringSystem>(),
 					sp.GetRequiredService<APIBasedMonitoringSystem>()
 				]))
+				.AddSingleton<MonitoringEventBuffer>()
 				.AddSingleton<MonitoringSerializerOptionsSource>()
 				
 				.AddSingleton<IAPIEndPointDriver, NetworkAPIEndPointDriver>()

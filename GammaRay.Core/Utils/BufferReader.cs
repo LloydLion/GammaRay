@@ -71,6 +71,8 @@ public ref struct BufferReader(ReadOnlySpan<byte> buffer, int initialReadLength 
 		return value;
 	}
 
+	public bool ReadBoolean() => ReadByte() > 0;
+
 	public void Advance(int advance)
 	{
 		ReadLength += advance;

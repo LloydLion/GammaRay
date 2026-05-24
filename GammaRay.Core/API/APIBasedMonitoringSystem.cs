@@ -2,13 +2,17 @@ using GammaRay.Core.Monitoring;
 using GammaRay.Core.Monitoring.Converters;
 using GammaRay.Core.Utils;
 using System.Buffers;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 
 namespace GammaRay.Core.API;
 
-public sealed class APIBasedMonitoringSystem(MonitoringSerializerOptionsSource serializerOptionsSource) : IMonitoringSystem, IAsyncDisposable
+public sealed class APIBasedMonitoringSystem(
+	MonitoringSerializerOptionsSource serializerOptionsSource,
+	MonitoringEventBuffer _eventBuffer
+) : IMonitoringSystem, IAsyncDisposable
 {
 	private readonly Dictionary<IAPIEventSink, TranslationConfiguration> _listeners = [];
 	private readonly ArrayPool<byte> _pool = ArrayPool<byte>.Create();
@@ -33,6 +37,8 @@ public sealed class APIBasedMonitoringSystem(MonitoringSerializerOptionsSource s
 
 	public void NewContext(MonitoringContext context)
 	{
+		_eventBuffer.Save(context);
+
 		if (IsAnyoneListening(MessageType.StandardEvent) == false)
 			return;
 		var buffer = CreateBuffer(APIConstants.EventType.MonitoringNewContext);
@@ -45,6 +51,8 @@ public sealed class APIBasedMonitoringSystem(MonitoringSerializerOptionsSource s
 
 	public void CloseContext(MonitoringContext context)
 	{
+		_eventBuffer.Discard(context);
+
 		if (IsAnyoneListening(MessageType.StandardEvent) == false)
 			return;
 		var buffer = CreateBuffer(APIConstants.EventType.MonitoringCloseContext);
@@ -55,6 +63,8 @@ public sealed class APIBasedMonitoringSystem(MonitoringSerializerOptionsSource s
 
 	public void NewReport(SystemReport report)
 	{
+		_eventBuffer.Save(report);
+
 		if (IsAnyoneListening(MessageType.StandardEvent) == false)
 			return;
 		var buffer = CreateBuffer(APIConstants.EventType.MonitoringNewReport);
@@ -66,6 +76,8 @@ public sealed class APIBasedMonitoringSystem(MonitoringSerializerOptionsSource s
 
 	public void FinishReport(SystemReport report)
 	{
+		//_eventBuffer.Discard(report);
+
 		if (IsAnyoneListening(MessageType.StandardEvent) == false)
 			return;
 		var buffer = CreateBuffer(APIConstants.EventType.MonitoringFinishReport);
@@ -111,6 +123,31 @@ public sealed class APIBasedMonitoringSystem(MonitoringSerializerOptionsSource s
 	public void ConfigureTranslation(IAPIEventSink eventSink, TranslationConfiguration configuration) => _listeners[eventSink] = configuration;
 
 	public void StopTranslation(IAPIEventSink eventSink) => _listeners.Remove(eventSink);
+
+	public int WritePendingMonitoringEvents(Span<byte> buffer)
+	{
+		var pendingContexts = _eventBuffer.RestoreAll();
+		var writer = new BufferWriter(buffer);
+		foreach (var pendingContextState in pendingContexts)
+		{
+			var context = pendingContextState.Context;
+			writer.WriteDateTime(context.CreationTime);
+			writer.WriteGuid(context.Id);
+			writer.WriteStringWithLength(context.Type, Encoding.UTF8);
+			writer.WriteInt(pendingContextState.OpenReports.Count);
+			foreach (var report in pendingContextState.OpenReports)
+			{
+				writer.WriteStringWithLength(report.GetType().FullName, Encoding.UTF8);
+				writer.WriteBoolean(report.Finished);
+				var wrote = 0;
+				report.ReadProperties(new PropertyReader(writer.UnusedBufferPart, ref wrote, this));
+				writer.Advance(wrote);
+				writer.WriteInt(-1);
+			}
+		}
+
+		return writer.UsedLength;
+	}
 
 	private bool IsAnyoneListening(MessageType type) => _listeners.Values.Any(configuration => IsListening(configuration, type));
 
@@ -195,8 +232,7 @@ public sealed class APIBasedMonitoringSystem(MonitoringSerializerOptionsSource s
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine($"Serialization error (Finish report): {propertyName} {property.Value}");
-					Console.WriteLine(ex);
+					Debugger.BreakForUserUnhandledException(ex);
 					writer.WriteInt(0);
 					return;
 				}

@@ -53,7 +53,9 @@ AsyncContext.Run(async () =>
 		apiClient.AddEventListener(apiMonitoringEventListener);
 
 		Console.WriteLine("Enabling monitoring...");
-		await apiClient.ControlMonitoringAsync(APIConstants.MonitoringMode.EnabledWithReportProperties);
+		var pendingEventsBuffer = new byte[APIConstants.MaxMessageSize];
+		var wroteToPendingEventsBuffer = await apiClient.ControlMonitoringAsync(APIConstants.MonitoringMode.EnabledWithReportProperties, pendingEventsBuffer);
+		apiMonitoringEventListener.FitPendingEvents(pendingEventsBuffer.AsSpan(..wroteToPendingEventsBuffer));
 		Console.WriteLine("✓ Monitoring enabled!");
 
 		redrawUI(tuiMonitoring);

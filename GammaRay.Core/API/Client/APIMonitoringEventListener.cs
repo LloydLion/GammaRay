@@ -1,6 +1,7 @@
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Monitoring.Converters;
 using GammaRay.Core.Utils;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -106,6 +107,56 @@ public sealed class APIMonitoringEventListener(IMonitoringSystem _targetSystem, 
 		}
 
 		return true;
+	}
+
+	public void FitPendingEvents(Span<byte> span)
+	{
+		var reader = new BufferReader(span);
+		while (reader.RemainingLength > 0)
+		{
+			var contextCreationTime = reader.ReadDateTime();
+			var contextId = reader.ReadGuid();
+			var contextType = reader.ReadStringWithLength(Encoding.UTF8);
+
+			var context = new MonitoringContext(contextType, contextCreationTime, _targetSystem, contextId);
+			var openContext = new StateFullOpenMonitoringContext(context);
+			_openMonitoringContexts[contextId] = openContext;
+
+			var reportCount = reader.ReadInt();
+			for (int i = 0; i < reportCount; i++)
+			{
+				var reportTypeName = reader.ReadStringWithLength(Encoding.UTF8);
+				var reportType = typeof(GammaRayAPIClient).Assembly.GetType(reportTypeName, false)
+					?? throw new Exception($"Invalid event: unknown report type {reportTypeName}");
+				var report = context.NewReport(reportType);
+				var finished = reader.ReadBoolean();
+
+				while (true)
+				{
+					var propertyNameLengthOrTerminator = reader.ReadInt();
+					if (propertyNameLengthOrTerminator == -1)
+						break;
+					var propertyName = reader.ReadString(Encoding.UTF8, propertyNameLengthOrTerminator);
+					var declaration = report.ListProperties()[propertyName];
+
+					var propLength = reader.ReadInt();
+					if (propLength != 0)
+					{
+						var jsonValue = reader.UnreadBufferPart[..propLength];
+						reader.Advance(propLength);
+
+						GetSetSystemReportPropertyMethod(declaration.ValueType)(this, report, declaration, jsonValue);
+					}
+				}
+
+				if (finished)
+					report.Finish();
+				else
+					openContext.OpenReports[report.Component] = report;
+			}
+
+			Debug.WriteLine($"CONTEXT restored: {contextType}/{contextId} with {reportCount} reports");
+		}
 	}
 
 	private static SetSystemReportPropertyDelegate GetSetSystemReportPropertyMethod(Type propertyValueType)

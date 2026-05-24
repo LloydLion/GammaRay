@@ -34,9 +34,12 @@ public abstract class SystemReport : IDisposable
 
 	public string Component { get; }
 
+	public bool Finished { get; private set; } = false;
+
 
 	public void Finish()
 	{
+		Finished = true;
 		MonitoringContext.NotifyReportFinished(this);
 	}
 

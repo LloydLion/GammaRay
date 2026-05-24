@@ -12,7 +12,7 @@ public interface IGammaRayAPIClient
 
 	public ValueTask<byte> RequestAPIVVersionAsync();
 
-	public ValueTask ControlMonitoringAsync(APIConstants.MonitoringMode monitoringMode);
+	public ValueTask<int> ControlMonitoringAsync(APIConstants.MonitoringMode monitoringMode, Memory<byte>? pendingEventBuffer = null);
 
 	public ValueTask RequestReloadApplicationAsync();
 
