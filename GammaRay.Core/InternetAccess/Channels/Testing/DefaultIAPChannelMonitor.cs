@@ -3,6 +3,8 @@ using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace GammaRay.Core.InternetAccess.Channels.Testing;
 
@@ -17,23 +19,26 @@ public sealed class DefaultIAPChannelMonitor(
 	InternetAccessPointProvider _internetAccessPointProvider,
 
 	IOptions<DefaultIAPChannelMonitor.Options> options,
-	IMonitoringSystem _monitoringSystem
+	IMonitoringSystem _monitoringSystem,
+
+	IIAPChannelPicker _picker
 ) : IIAPChannelMonitor, IDisposable
 {
 	private readonly Options _options = options.Value;
-	private RunningFullTestInformation? _runningTestInformation = null;
+	private readonly Dictionary<InternetAccessPoint, RunningFullTestInformation?> _runningTests = [];
 	private ActivationContext? _activationContext = null;
+	private bool _isUpdating = false;
 
 
 	public void StartMonitoring()
 	{
 		var networkIdentifierSubscription = _networkIdentifier.SubscribeForChanges(NetworkIdentityChangeCallback);
-		var timer = _timeProvider.CreateTimer(TimerCallback, this, _options.UpdateTimerPeriod, _options.UpdateTimerPeriod);
+		var updateTimer = _timeProvider.CreateTimer(UpdateTimerCallback, this, _options.UpdateTimerPeriod, _options.UpdateTimerPeriod);
 		var capturedSynchronizationContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
-		_activationContext = new ActivationContext(networkIdentifierSubscription, timer, capturedSynchronizationContext);
+		_activationContext = new ActivationContext(networkIdentifierSubscription, updateTimer, capturedSynchronizationContext);
 
-		BeginFullChannelTestIfNeed();
+		Update();
 	}
 
 	public void Dispose()
@@ -46,26 +51,56 @@ public sealed class DefaultIAPChannelMonitor(
 	}
 
 	private void NetworkIdentityChangeCallback(INetworkIdentifier _) =>
-		BeginFullChannelTestIfNeed();
+		Update();
 
-	private static void TimerCallback(object? state) =>
+	private static void UpdateTimerCallback(object? state) =>
 		(state as DefaultIAPChannelMonitor)?._activationContext?.CapturedSynchronizationContext.Post(static state =>
-			(state as DefaultIAPChannelMonitor)?.BeginFullChannelTestIfNeed(), state);
+			(state as DefaultIAPChannelMonitor)?.Update(), state);
 
-	private void BeginFullChannelTestIfNeed()
+	private async void Update()
 	{
+		if (_isUpdating) return;
+
 		try
 		{
+			_isUpdating = true;
+
 			var currentIdentity = _networkIdentifier.CurrentIdentity;
 			var currentProfile = _networkProfileMapping.GetProfileFor(currentIdentity);
 
-			if (_runningTestInformation is not null and { IsCompleted: false })
+			HashSet<Task>? tasks = null;
+			foreach (var IAP in _internetAccessPointProvider.PlainRemoteInternetAccessPoints)
+			{
+				var task = updateForIAP(IAP, currentProfile);
+				if (task.IsCompleted == false)
+				{
+					tasks ??= new();
+					tasks.Add(task);
+				}
+				else await task;
+			}
+
+			if (tasks is not null)
+				await Task.WhenAll(tasks);
+		}
+		catch (Exception ex) { Debugger.BreakForUserUnhandledException(ex); }
+		finally
+		{
+			_isUpdating = false;
+		}
+
+
+		async Task updateForIAP(InternetAccessPoint IAP, NetworkProfile currentProfile)
+		{
+			var runningTest = _runningTests.GetValueOrDefault(IAP);
+
+			if (runningTest is not null and { IsCompleted: false })
 			{
 				// If we are already performing a test and
 				// the network profile did not change -> we should do nothing, as the test is still relevant
 				// the network profile changed -> we should cancel the test, as it is not relevant anymore
 
-				if (_runningTestInformation.PerformingInNetwork == currentProfile)
+				if (runningTest.PerformingInNetwork == currentProfile)
 				{
 					return;
 				}
@@ -73,29 +108,51 @@ public sealed class DefaultIAPChannelMonitor(
 				{
 					// Canceling test without awaiting its tracking task
 					// it will shutdown gracefully without side effects on shared state
-					_runningTestInformation.Cancellation.Cancel();
+					runningTest.Cancellation.Cancel();
 				}
 			}
 
 			// Set information object to null to do not prevent GC from deleting it
 			// We cannot do it in 'PerformFullChannelTest' because possible side effects
-			if (_runningTestInformation is not null and { IsCompleted: true })
-				_runningTestInformation = null;
+			if (runningTest is not null and { IsCompleted: true })
+				runningTest = null;
 
-			var now = _timeProvider.GetUtcNow().UtcDateTime;
-			var lastUpdate = _statusRepository.GetLastStatusUpdateTime(currentProfile);
+			// Retest if: 1) result is too old, 2) continuous channel test failed
+			bool shouldPerformFullTest = false;
 
-			if (now - lastUpdate >= _options.StatusDecayTime) // Status too old, retest it
+			// Run CCT only when full test is not running
+			if (_options.EnableContinuousChannelTesting)
 			{
-				_runningTestInformation = new RunningFullTestInformation(currentProfile);
-				var task = PerformFullChannelTest(_runningTestInformation);
-				_runningTestInformation.TrackingTask = task;
+				var CCTResult = await PerformContinuousChannelTestAsync(IAP, currentProfile);
+				if (CCTResult is (false, not null))
+				{
+					IEnumerable<IAPChannelStatus> newStatus = [
+						new IAPChannelStatus(IAP, CCTResult.UsedChannelStatus.Channel,
+							currentProfile, IAPChannelStatus.UnavailableAccessTime)
+					];
+					_statusRepository.UpdateStatuses(newStatus);
+					shouldPerformFullTest = true;
+				}
+			}
+
+			if (shouldPerformFullTest == false)
+			{
+				var now = _timeProvider.GetUtcNow().UtcDateTime;
+				var lastUpdate = _statusRepository.GetLastStatusUpdateTime(currentProfile);
+				shouldPerformFullTest = now - lastUpdate >= _options.StatusDecayTime;
+			}
+
+			if (shouldPerformFullTest)
+			{
+				runningTest = new RunningFullTestInformation(currentProfile, IAP);
+				var task = PerformFullChannelTestAsync(runningTest);
+				runningTest.TrackingTask = task;
+				_runningTests[IAP] = runningTest;
 			}
 		}
-		catch (Exception) { }
 	}
 
-	private async Task PerformFullChannelTest(RunningFullTestInformation testInformation)
+	private async Task PerformFullChannelTestAsync(RunningFullTestInformation testInformation)
 	{
 		await Task.Yield();
 		var cancellationToken = testInformation.Cancellation.Token;
@@ -105,29 +162,36 @@ public sealed class DefaultIAPChannelMonitor(
 
 		try
 		{
-			var currentProfile = testInformation.PerformingInNetwork;
+			var workingProfile = testInformation.PerformingInNetwork;
 
-			var baseLine = await getLocalBaseLineResult(currentProfile, cancellationToken);
+			var baseLine = await getLocalBaseLineResult(workingProfile, cancellationToken);
 			report.LocalBaseLine = baseLine;
 			var outputStatusTable = new List<IAPChannelStatus>();
 
-			foreach (var IAP in _internetAccessPointProvider.PlainRemoteInternetAccessPoints)
+			var IAP = testInformation.IAP;
+
+			foreach (var channel in IAP.Channels.Values)
 			{
-				foreach (var channel in IAP.Channels.Values)
+				var currentProfile = _networkProfileMapping.GetProfileFor(_networkIdentifier.CurrentIdentity);
+				if (currentProfile != workingProfile)
 				{
-					if (cancellationToken.IsCancellationRequested)
-						return;
-
-					if (channel.AvailableInNetwork.Contains(currentProfile) == false)
-						return;
-
-					var result = await PerformTestAsync(channel, cancellationToken);
-					result = AdjustResult(result, baseLine);
-					outputStatusTable.Add(new IAPChannelStatus(IAP, channel, currentProfile, result));
+					testInformation.Cancellation.Cancel();
+					return;
 				}
+
+				if (cancellationToken.IsCancellationRequested)
+					return;
+
+				if (channel.AvailableInNetwork.Contains(workingProfile) == false)
+					return;
+
+				var result = await PerformTestAsync(channel, cancellationToken);
+				result = AdjustResult(result, baseLine);
+				outputStatusTable.Add(new IAPChannelStatus(IAP, channel, workingProfile, result));
 			}
 
 			report.Result = outputStatusTable;
+
 			_statusRepository.UpdateStatuses(outputStatusTable);
 		}
 		catch (OperationCanceledException) { }
@@ -180,16 +244,35 @@ public sealed class DefaultIAPChannelMonitor(
 		return totalDuration / _options.SimpleTestCount;
 	}
 
+	private async ValueTask<(bool Success, IAPChannelStatus? UsedChannelStatus)> PerformContinuousChannelTestAsync(InternetAccessPoint IAP, NetworkProfile currentProfile)
+	{
+		var bestChannelStatus = _picker.PickBestChannel(IAP, currentProfile, new IAPChannelRequirements());
+		if (bestChannelStatus is null)
+			return (true, bestChannelStatus);
+		var bestChannel = bestChannelStatus.Channel;
+
+		for (var i = 0; i < 3; i++)
+		{
+			var testResult = await _simpleChannelTester.PerformTestAsync(bestChannel, default);
+			if (testResult.Status == IAPChannelSimpleTestResult.TestStatus.Success)
+				return (true, bestChannelStatus);
+		}
+
+		return (false, bestChannelStatus);
+	}
+
 
 	public sealed class Options
 	{
 		public TimeSpan StatusDecayTime { get; init; } = TimeSpan.FromHours(3);
 
-		public TimeSpan UpdateTimerPeriod { get; init; } = TimeSpan.FromMinutes(10);
+		public TimeSpan UpdateTimerPeriod { get; init; } = TimeSpan.FromSeconds(5);
 
 		public int SimpleTestCount { get; init; } = 5;
 
 		public TimeSpan SimpleTestInterval { get; init; } = TimeSpan.FromSeconds(3);
+
+		public bool EnableContinuousChannelTesting { get; init; } = true;
 	}
 
 	private sealed record ActivationContext(
@@ -198,8 +281,10 @@ public sealed class DefaultIAPChannelMonitor(
 		SynchronizationContext CapturedSynchronizationContext
 	);
 
-	private sealed class RunningFullTestInformation(NetworkProfile performingInNetwork)
+	private sealed class RunningFullTestInformation(NetworkProfile performingInNetwork, InternetAccessPoint IAP)
 	{
+		public InternetAccessPoint IAP { get; } = IAP;
+
 		public Task? TrackingTask { get; set; }
 
 		public NetworkProfile PerformingInNetwork { get; } = performingInNetwork;

@@ -39,7 +39,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 	public void Initialize()
 	{
 		_synchronizationContext = SynchronizationContext.Current ?? new();
-		InitiateNetworkIdentityRefresh();
+		InitiateNetworkIdentityRefresh(sync: true);
 		NetworkChange.NetworkAddressChanged += NetworkChanged;
 	}
 
@@ -56,12 +56,12 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 		GC.SuppressFinalize(this);
 	}
 
-	public bool InitiateNetworkIdentityRefresh()
+	public bool InitiateNetworkIdentityRefresh(bool sync = false)
 	{
 		if (Interlocked.Exchange(ref _isRefreshing, 1) == 1)
 			return false;
 
-		SynchronizationContext.Post(_ =>
+		void callback(object? _)
 		{
 			using var context = new MonitoringContext("NetworkIdentityRefresh", _time, _monitoringSystem);
 			using var report = context.NewReport<Report>();
@@ -70,7 +70,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 			try
 			{
 				_identity = FetchCurrentNetworkIdentity(context);
-				_lastRefresh = DateTime.UtcNow;
+				_lastRefresh = _time.GetUtcNow().DateTime;
 
 				foreach (var subscriber in _subscribers)
 					subscriber.Call();
@@ -86,7 +86,12 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 				_isRefreshing = 0;
 			}
 
-		}, null);
+		}
+
+		if (sync)
+			SynchronizationContext.Send(callback, null);
+		else
+			SynchronizationContext.Post(callback, null);
 
 		return true;
 	}
