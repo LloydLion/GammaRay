@@ -110,7 +110,7 @@ public sealed class MonitoringEventBuffer
 
 		public MonitoringContext Context => _context ?? throw new InvalidOperationException("Initialize first");
 
-		public int RefCounter { get; set; } = 1;
+		public int RefCounter { get; set; } = 0;
 
 		public Dictionary<SystemReport, int> OpenReports { get; } = [];
 
