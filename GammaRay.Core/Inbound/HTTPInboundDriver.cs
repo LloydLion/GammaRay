@@ -1,5 +1,6 @@
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
+using GammaRay.Core.Network.Flow;
 using GammaRay.Core.Network.Flow.Implementation;
 using GammaRay.Core.Protocols.HTTP;
 using GammaRay.Core.Utils;
@@ -37,6 +38,8 @@ public sealed class HTTPInboundDriver(
 
 	private class Inbound(IPEndPoint localEndPoint, HTTPInboundDriver owner) : IInbound
 	{
+		private const string HostHeader = "Host";
+		private const string ConnectionHeader = "Connection";
 		private const string ProxyConnectionHeader = "Proxy-Connection";
 		private static readonly string ConnectionEstablishedMessageString =
 			new HttpResponseHeader(200, "Connection established", HttpMessageHeader.HTTP11, []).Serialize();
@@ -121,7 +124,7 @@ public sealed class HTTPInboundDriver(
 						var requestType = header.Method == "CONNECT" ? HttpProxyRequestType.Connect : HttpProxyRequestType.HTTP;
 						requestContext = new RequestContext(
 							new WebEndPoint(destinationEndPoint.Value, TransportType.StreamBased),
-							FormIncomingDataFlow(clientContext, requestType),
+							FormIncomingDataFlow(clientContext, header, destinationEndPoint.Value, requestType),
 							now, monitoring
 						);
 
@@ -150,12 +153,27 @@ public sealed class HTTPInboundDriver(
 			}
 		}
 
-		private static SocketBasedStreamDataFlow FormIncomingDataFlow(ProxyClientContext clientContext, HttpProxyRequestType requestType)
+		private static IStreamDataFlow FormIncomingDataFlow(ProxyClientContext clientContext, HttpRequestHeader request, GenericWebEndPoint endPoint, HttpProxyRequestType requestType)
 		{
-			if (requestType != HttpProxyRequestType.Connect)
-				throw new NotSupportedException();
+			IStreamDataFlow flow = new SocketBasedStreamDataFlow(clientContext.Socket);
 
-			return new SocketBasedStreamDataFlow(clientContext.Socket);
+			if (requestType != HttpProxyRequestType.Connect)
+			{
+				var headers = request.Headers.Clone();
+				headers.Remove(ProxyConnectionHeader);
+				headers.Set(ConnectionHeader, "close");
+				headers.Set(HostHeader, endPoint.Host.Domain);
+
+				var uri = new HttpUri(null, null, request.Uri.Path, request.Uri.Query);
+
+				var newRequest = new HttpRequestHeader(request.Method, uri, request.Version, headers);
+				var textRequest = newRequest.Serialize();
+				var binRequest = Encoding.UTF8.GetBytes(textRequest);
+
+				flow = new PrependDataFlowWrapper(binRequest, flow);
+			}
+
+			return flow;
 		}
 
 		private static async Task<bool> AwaitNewData(Socket socket)

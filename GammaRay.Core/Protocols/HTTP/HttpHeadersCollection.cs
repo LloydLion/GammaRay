@@ -1,10 +1,23 @@
 using System.Collections;
+using YamlDotNet.Core.Tokens;
 
 namespace GammaRay.Core.Protocols.HTTP
 {
 	public class HttpHeadersCollection : IEnumerable<(string Key, string Value)>
 	{
 		private readonly Dictionary<string, object> _headers = [];
+
+
+		public HttpHeadersCollection()
+		{
+
+		}
+
+		private HttpHeadersCollection(Dictionary<string, object> headers, int count)
+		{
+			_headers = headers;
+			Count = count;
+		}
 
 
 		public int Count { get; private set; }
@@ -31,6 +44,19 @@ namespace GammaRay.Core.Protocols.HTTP
 			return null;
 		}
 
+		public void Set(string header, string value)
+		{
+			Count -= CountHeader(header);
+			Count += 1;
+			_headers[header] = value;
+		}
+
+		public void Remove(string header)
+		{
+			Count -= CountHeader(header);
+			_headers.Remove(header);
+		}
+
 		public IEnumerable<string> GetAll(string header)
 		{
 			if (_headers.TryGetValue(header, out var obj))
@@ -40,6 +66,13 @@ namespace GammaRay.Core.Protocols.HTTP
 				else return [(string)obj];
 			}
 			return [];
+		}
+
+		public int CountHeader(string header)
+		{
+			if (_headers.TryGetValue(header, out var obj))
+				return obj is List<string> list ? list.Count : 1;
+			return 0;
 		}
 
 		public void RemoveAll(string header)
@@ -62,6 +95,16 @@ namespace GammaRay.Core.Protocols.HTTP
 				}
 				else yield return (kv.Key, (string)kv.Value);
 			}
+		}
+
+		public HttpHeadersCollection Clone()
+		{
+			var headersClone = _headers.ToDictionary(kv => kv.Key, kv => kv.Value switch
+			{
+				List<string> list => new List<string>(list),
+				var a => a
+			});
+			return new HttpHeadersCollection(headersClone, Count);
 		}
 	}
 }
