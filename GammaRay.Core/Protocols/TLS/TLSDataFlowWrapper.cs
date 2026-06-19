@@ -16,11 +16,14 @@ public sealed class TLSDataFlowWrapper : IStreamDataFlow
 	}
 
 
-	public async ValueTask BeginConnectionAsync(string hostName, TimeSpan timeout)
+	public ValueTask BeginConnectionAsync(string hostName, TimeSpan timeout, CancellationToken cancellation = default) =>
+		BeginConnectionAsync(new SslClientAuthenticationOptions { TargetHost = hostName }, timeout, cancellation);
+
+	public async ValueTask BeginConnectionAsync(SslClientAuthenticationOptions authenticationOptions, TimeSpan timeout, CancellationToken cancellation = default)
 	{
 		_streamWrapper.ReadingOptions = new() { Timeout = timeout };
 		_streamWrapper.WritingOptions = new() { Timeout = timeout };
-		await _sslStream.AuthenticateAsClientAsync(hostName);
+		await _sslStream.AuthenticateAsClientAsync(authenticationOptions, cancellation);
 	}
 
 	public int Read(Span<byte> buffer, DataFlowReadingOptions readingOptions)

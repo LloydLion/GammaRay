@@ -71,15 +71,17 @@ public sealed class SmartRouter(
 					if (table.Table.TryGetValue(IAP, out var serviceStatus) == false || serviceStatus.Type != acceptableStatusType)
 						continue;
 
-					var channelStatus = _channelPicker.PickBestChannel(IAP, networkProfile, channelRequirements);
-					if (channelStatus is null or { IsAvailable: false })
+					var pickResult = _channelPicker.PickBestChannel(IAP, networkProfile, channelRequirements);
+					if (pickResult is null or { Status.IsAvailable: false })
 						continue;
+
+					var (channelStatus, channel) = pickResult.Value;
 
 					var totalMetric = channelStatus.AverageAccessTime + serviceStatus.AverageProbeTime;
 					if (totalMetric < bestMetric)
 					{
 						bestMetric = totalMetric;
-						bestChannel = (IAP, channelStatus.Channel);
+						bestChannel = (IAP, channel);
 					}
 				}
 
@@ -95,8 +97,8 @@ public sealed class SmartRouter(
 			foreach (var IAP in blob.Points)
 			{
 				var status = _channelPicker.PickBestChannel(IAP, networkProfile, channelRequirements);
-				if (status is not null and { IsAvailable: true })
-					{ result = (IAP, status.Channel); goto returnResult; }
+				if (status is not null and { Status.IsAvailable: true })
+					{ result = (IAP, status.Value.Channel); goto returnResult; }
 			}
 		}
 

@@ -1,37 +1,39 @@
+using GammaRay.Core.InternetAccess.Channels.Testing;
 using GammaRay.Core.Routing.NetworkProfiles;
-using GammaRay.Core.Utils;
 
 namespace GammaRay.Core.InternetAccess.Channels;
 
-public sealed class StatusBasedChannelPicker(IIAPChannelStatusRepository _statusRepository) : IIAPChannelPicker
+public sealed class StatusBasedChannelPicker(IIAPChannelMonitor _monitor) : IIAPChannelPicker
 {
-	private readonly Dictionary<InternetAccessPoint, IAPChannelStatus> pseudoStatuses = [];
-
-
-	public IAPChannelStatus? PickBestChannel(InternetAccessPoint accessPoint, NetworkProfile currentNetwork, in IAPChannelRequirements requirements)
+	public (IAPChannelStatus Status, IAPChannel Channel)? PickBestChannel(InternetAccessPoint accessPoint, NetworkProfile currentNetwork, in IAPChannelRequirements requirements)
 	{
 		// Special handling for local IAPs
 		if (accessPoint.Name.StartsWith(InternetAccessPointProvider.LocalIAPPrefix))
 		{
-			var localNetwork = accessPoint.Channels[InternetAccessPointProvider.LocalIAPChannelName].AvailableInNetwork[0];
-			if (localNetwork != currentNetwork)
-				return null;
-
-			if (pseudoStatuses.TryGetValue(accessPoint, out var status))
-				return status;
-			status = new IAPChannelStatus(accessPoint, accessPoint.Channels[InternetAccessPointProvider.LocalIAPChannelName], localNetwork, TimeSpan.Zero);
-			pseudoStatuses.Add(accessPoint, status);
-			return status;
+			var channel = accessPoint.Channels[InternetAccessPointProvider.LocalIAPChannelName];
+			var localNetwork = channel.AvailableInNetwork[0];
+			if (localNetwork == currentNetwork)
+				return (IAPChannelStatus.BestStatus, channel);
+			else return null;
 		}
 
 
-		var bestChannelStatus = accessPoint.Channels.Values
-			.Where(channel => channel.AvailableInNetwork.Contains(currentNetwork))
-			.Select(channel => _statusRepository.TryGetStatus(accessPoint, channel, currentNetwork))
-			.WhereNotNull()
-			.MinBy(s => s.AverageAccessTime);
-		// Unavailable status is 'bigger' then any other one
+		(IAPChannelStatus Status, IAPChannel Channel)? bestChannel = null;
 
-		return bestChannelStatus;
+		foreach (var channel in accessPoint.Channels.Values)
+		{
+			if (channel.AvailableInNetwork.Contains(currentNetwork) == false)
+				continue;
+
+			var status = _monitor.GetStatus(accessPoint, channel, currentNetwork);
+
+			if (status.IsAvailable == false)
+				continue;
+
+			if (bestChannel is not null && status.CharacteristicAccessTime <= bestChannel.Value.Status.CharacteristicAccessTime)
+				bestChannel = (status, channel);
+		}
+
+		return bestChannel;
 	}
 }

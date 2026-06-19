@@ -14,7 +14,7 @@ internetAccessPoints:
     channels:
       vless-reality-xhttp:
         protocol: socks
-        endPoint: 127.0.0.2:2011
+        endPoint: 127.0.0.1:20000
         tags: []
         availableInNetwork: [ default ]
 

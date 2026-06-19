@@ -1,34 +1,6 @@
-using GammaRay.Core.Routing.NetworkProfiles;
-
 namespace GammaRay.Core.InternetAccess.Channels;
 
-public sealed class IAPChannelStatus(
-	InternetAccessPoint internetAccessPoint,
-	IAPChannel channel,
-	NetworkProfile network,
-	TimeSpan averageAccessTime
-)
+public readonly record struct IAPChannelStatus(TimeSpan CharacteristicAccessTime, TimeSpan AverageAccessTime, double AccessChance, bool IsAvailable)
 {
-	public static readonly TimeSpan UnavailableAccessTime = TimeSpan.MaxValue;
-
-
-	public InternetAccessPoint InternetAccessPoint { get; } = internetAccessPoint;
-
-	public IAPChannel Channel { get; } = channel;
-
-	public NetworkProfile Network { get; } = network;
-
-	public TimeSpan AverageAccessTime { get; } = averageAccessTime;
-
-
-	public bool IsAvailable => AverageAccessTime != TimeSpan.MaxValue;
-
-
-	public override string ToString()
-	{
-		var channelName = InternetAccessPoint.InverseChannels[Channel];
-		return $"""
-		Status {InternetAccessPoint}/{channelName} in {Network}: {(IsAvailable ? AverageAccessTime.TotalMilliseconds : "INF")}ms
-		""";
-	}
+	public static IAPChannelStatus BestStatus { get; } = new IAPChannelStatus(TimeSpan.Zero, TimeSpan.Zero, 1.0, true);
 }

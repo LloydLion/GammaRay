@@ -6,6 +6,7 @@ using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
+using System.Threading.Channels;
 using static GammaRay.Core.Services.Probing.ProbeResult;
 
 namespace GammaRay.Core.Services.Probing;
@@ -66,11 +67,11 @@ public sealed class ProbingManager(
 			var rawStatusTable = new Dictionary<InternetAccessPoint, ServiceIAPStatus>();
 			foreach (var IAP in pointsToProbeVia)
 			{
-				var channelStatus = GetAvailableChannel(IAP);
-				if (channelStatus is null)
+				var searchResult = GetAvailableChannel(IAP);
+				if (searchResult is null)
 					continue;
 				// If failed to connect to IAP, there is no result (positive or negative)
-				var channel = channelStatus.Channel;
+				var (channelStatus, channel) = searchResult.Value;
 				var channelDriver = _channelDriverRegistry.ProvideDriver(channel.DriverName);
 
 				var rawStatus = await PerformProbeAsync(driver, channelDriver, IAP, channel, endPoint, materializedParameters, context);
@@ -181,7 +182,7 @@ public sealed class ProbingManager(
 		return result;
 	}
 
-	private IAPChannelStatus? GetAvailableChannel(InternetAccessPoint IAP)
+	private (IAPChannelStatus Status, IAPChannel Channel)? GetAvailableChannel(InternetAccessPoint IAP)
 	{
 		var currentIdentity = _networkIdentifier.CurrentIdentity;
 		var profile = _networkProfileRepository.GetProfileFor(currentIdentity);

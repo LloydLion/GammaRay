@@ -43,7 +43,7 @@ internal class Program
 				.AddSingleton<IServiceRepository, DbServiceRepository>()
 				.Configure<DbServiceStatusTableRepository.Options>(s => { })
 				.AddSingleton<IServiceStatusTableRepository, DbServiceStatusTableRepository>()
-				.AddSingleton<IIAPChannelStatusRepository, DbIAPChannelStatusRepository>()
+				.AddSingleton<IIAPChannelObservedDataRepository, DbIAPChannelObservedDataRepository>()
 
 				.Configure<HTTPInboundDriver.Options>(s => { })
 				.AddSingleton<IInboundDriver, HTTPInboundDriver>()
@@ -80,7 +80,7 @@ internal class Program
 				.AddSingleton<ConsoleMonitoringSystem>()
 				.AddSingleton<APIBasedMonitoringSystem>()
 				.AddSingleton<IMonitoringSystem, MultiHeadMonitoringSystem>(sp => new([
-					//sp.GetRequiredService<ConsoleMonitoringSystem>(),
+					sp.GetRequiredService<ConsoleMonitoringSystem>(),
 					sp.GetRequiredService<APIBasedMonitoringSystem>()
 				]))
 				.AddSingleton<MonitoringEventBuffer>()
@@ -98,7 +98,7 @@ internal class Program
 
 			((DbServiceRepository)sp.GetRequiredService<IServiceRepository>()).Initialize();
 			((DbServiceStatusTableRepository)sp.GetRequiredService<IServiceStatusTableRepository>()).Initialize();
-			((DbIAPChannelStatusRepository)sp.GetRequiredService<IIAPChannelStatusRepository>()).Initialize();
+			((DbIAPChannelObservedDataRepository)sp.GetRequiredService<IIAPChannelObservedDataRepository>()).Initialize();
 
 			((DefaultIAPChannelMonitor)sp.GetRequiredService<IIAPChannelMonitor>()).StartMonitoring();
 

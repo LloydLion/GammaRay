@@ -1,22 +1,23 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.Routing.NetworkProfiles;
-using GammaRay.Core.InternetAccess;
+using System.Runtime.Intrinsics.X86;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace GammaRay.Core.Monitoring.Converters;
 
 public sealed class IAPChannelStatusConverter : JsonConverter<IAPChannelStatus>
 {
-	public override IAPChannelStatus? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+	public override IAPChannelStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
 	{
 		if (reader.TokenType != JsonTokenType.StartObject)
 			throw new JsonException("Expected StartObject token");
 
-		InternetAccessPoint? iap = null;
-		IAPChannel? channel = null;
-		NetworkProfile? network = null;
-		TimeSpan? avg = null;
+		TimeSpan? averageAccessTime = null;
+		TimeSpan? characteristicAccessTime = null;
+		double? accessChance = null;
+		bool? isAvailable = null;
 
 		while (reader.Read())
 		{
@@ -28,39 +29,42 @@ public sealed class IAPChannelStatusConverter : JsonConverter<IAPChannelStatus>
 				reader.Read();
 				switch (prop)
 				{
-					case "internetAccessPoint":
-						iap = JsonSerializer.Deserialize<InternetAccessPoint>(ref reader, options);
-						break;
-					case "channel":
-						channel = JsonSerializer.Deserialize<IAPChannel>(ref reader, options);
-						break;
-					case "network":
-						network = JsonSerializer.Deserialize<NetworkProfile>(ref reader, options);
-						break;
 					case "averageAccessTime":
-						avg = TimeSpan.FromTicks(reader.GetInt64());
+						averageAccessTime = TimeSpan.FromTicks(reader.GetInt64());
+						break;
+					case "characteristicAccessTime":
+						characteristicAccessTime = TimeSpan.FromTicks(reader.GetInt64());
+						break;
+					case "accessChance":
+						accessChance = reader.GetDouble();
+						break;
+					case "isAvailable":
+						isAvailable = reader.GetBoolean();
 						break;
 				}
 			}
 		}
 
-		if (iap is null || channel is null || network is null || avg is null)
+		if (averageAccessTime is null || characteristicAccessTime is null || accessChance is null || isAvailable is null)
 			throw new JsonException("Missing required properties for IAPChannelStatus");
 
-		return new IAPChannelStatus(iap, channel, network, avg.Value);
+		return new IAPChannelStatus(characteristicAccessTime.Value, averageAccessTime.Value, accessChance.Value, isAvailable.Value);
 	}
 
 	public override void Write(Utf8JsonWriter writer, IAPChannelStatus value, JsonSerializerOptions options)
 	{
 		writer.WriteStartObject();
-		writer.WritePropertyName("internetAccessPoint");
-		JsonSerializer.Serialize(writer, value.InternetAccessPoint, options);
-		writer.WritePropertyName("channel");
-		JsonSerializer.Serialize(writer, value.Channel, options);
-		writer.WritePropertyName("network");
-		JsonSerializer.Serialize(writer, value.Network, options);
 		writer.WritePropertyName("averageAccessTime");
 		writer.WriteNumberValue(value.AverageAccessTime.Ticks);
+
+		writer.WritePropertyName("characteristicAccessTime");
+		writer.WriteNumberValue(value.CharacteristicAccessTime.Ticks);
+
+		writer.WritePropertyName("accessChance");
+		writer.WriteNumberValue(value.AccessChance);
+
+		writer.WritePropertyName("isAvailable");
+		writer.WriteBooleanValue(value.IsAvailable);
 		writer.WriteEndObject();
 	}
 }
