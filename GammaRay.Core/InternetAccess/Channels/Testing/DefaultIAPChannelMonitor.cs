@@ -97,7 +97,9 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 
 	private void Update()
 	{
-		var networkProfile = _networkProfileMapping.GetProfileFor(_networkIdentifier.CurrentIdentity);
+		var networkProfile = _networkProfileMapping.GetProfileForOrNull(_networkIdentifier.CurrentIdentity);
+		if (networkProfile is null)
+			return;
 
 		foreach (var worker in _channelWorkers[networkProfile].Values)
 			worker.Update();
@@ -275,7 +277,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 			_timeoutHandle.Dispose();
 		}
 
-		private bool CheckNetwork() => _owner._networkProfileMapping.GetProfileFor(_owner._networkIdentifier.CurrentIdentity) == _network;
+		private bool CheckNetwork() => _owner._networkProfileMapping.GetProfileForOrNull(_owner._networkIdentifier.CurrentIdentity) == _network;
 
 		private async ValueTask<TestResult> PerformTestAsync(MonitoringContext monitoring)
 		{

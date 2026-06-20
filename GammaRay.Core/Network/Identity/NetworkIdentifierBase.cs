@@ -1,4 +1,5 @@
 using GammaRay.Core.Monitoring;
+using Nito.AsyncEx;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -8,6 +9,7 @@ namespace GammaRay.Core.Network.Identity;
 public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 {
 	private readonly static TimeSpan RefreshEventTimeout = TimeSpan.FromSeconds(3);
+	private readonly static TimeSpan PingTimeout = TimeSpan.FromSeconds(3);
 	private readonly static IPAddress InternetAddress = new([1, 1, 1, 1]);
 
 
@@ -15,6 +17,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 	private readonly HashSet<Subscription> _subscribers = [];
 	private readonly IMonitoringSystem _monitoringSystem;
 	private readonly TimeProvider _time;
+	private readonly Ping _pingAgent = new();
 	private SynchronizationContext? _synchronizationContext;
 	private DateTime? _lastRefresh;
 	private NetworkIdentity? _identity;
@@ -31,7 +34,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 
 	public DateTime LastRefresh => _lastRefresh ?? throw ThrowNotInitialized();
 
-	public NetworkIdentity CurrentIdentity => _identity ?? throw ThrowNotInitialized();
+	public NetworkIdentity? CurrentIdentity => _lastRefresh is null ? throw ThrowNotInitialized() : _identity;
 
 	protected SynchronizationContext SynchronizationContext => _synchronizationContext ?? throw ThrowNotInitialized();
 
@@ -61,15 +64,21 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 		if (Interlocked.Exchange(ref _isRefreshing, 1) == 1)
 			return false;
 
-		void callback(object? _)
+		async Task callback()
 		{
-			using var context = new MonitoringContext("NetworkIdentityRefresh", _time, _monitoringSystem);
-			using var report = context.NewReport<Report>();
-			report.IdentifierName = GetType().Name;
-
+			MonitoringContext? context = null;
+			Report? report = null;
 			try
 			{
-				_identity = FetchCurrentNetworkIdentity(context);
+				context = new MonitoringContext("NetworkIdentityRefresh", _time, _monitoringSystem);
+				report = context.NewReport<Report>();
+				report.IdentifierName = GetType().Name;
+
+				var newIdentity = FetchCurrentNetworkIdentity(context);
+
+				var isInternetReachable = await PingInternet();
+
+				_identity = isInternetReachable ? newIdentity : null;
 				_lastRefresh = _time.GetUtcNow().DateTime;
 
 				foreach (var subscriber in _subscribers)
@@ -79,19 +88,21 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 			}
 			catch (Exception ex)
 			{
-				report.Exception = ex;
+				report?.Exception = ex;
 			}
 			finally
 			{
+				report?.Finish();
+				context?.Close();
 				_isRefreshing = 0;
 			}
 
 		}
 
 		if (sync)
-			SynchronizationContext.Send(callback, null);
+			SynchronizationContext.Send((_) => AsyncContext.Run(callback), null);
 		else
-			SynchronizationContext.Post(callback, null);
+			SynchronizationContext.Post(async (_) => await callback(), null);
 
 		return true;
 	}
@@ -114,6 +125,16 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 		throw new Exception("No network interface found for IP " + ipAddress);
 	}
 
+	private async ValueTask<bool> PingInternet()
+	{
+		var reply = await _pingAgent.SendPingAsync(InternetAddress, PingTimeout);
+		return reply.Status switch
+		{
+			IPStatus.Success => true,
+			_ => false
+		};
+	}
+
 	private void NetworkChanged(object? sender, EventArgs e)
 	{
 		_timer.Change(RefreshEventTimeout, Timeout.InfiniteTimeSpan);
@@ -131,7 +152,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 
 	public class Report() : SystemReport(nameof(NetworkIdentifierBase))
 	{
-		public ReportProperty<NetworkIdentity> NewNetworkIdentity { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<NetworkIdentity?> NewNetworkIdentity { get; set => SetProperty(ref field, value.Value); }
 
 		public ReportProperty<Exception> Exception { get; set => SetProperty(ref field, value.Value); }
 

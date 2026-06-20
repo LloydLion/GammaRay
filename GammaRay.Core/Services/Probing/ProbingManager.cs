@@ -185,7 +185,9 @@ public sealed class ProbingManager(
 	private (IAPChannelStatus Status, IAPChannel Channel)? GetAvailableChannel(InternetAccessPoint IAP)
 	{
 		var currentIdentity = _networkIdentifier.CurrentIdentity;
-		var profile = _networkProfileRepository.GetProfileFor(currentIdentity);
+		var profile = _networkProfileRepository.GetProfileForOrNull(currentIdentity);
+		if (profile is null)
+			return null;
 
 		var bestChannelStatus = _channelPicker.PickBestChannel(IAP, profile, new IAPChannelRequirements());
 
