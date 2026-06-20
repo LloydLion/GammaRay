@@ -15,6 +15,6 @@ public class YAMLConfigurationLoader
 		_root = document.RootNode.AsMapping();
 	}
 
-	public YamlMappingNode GetFragment(string key) =>
-		_root?.ExceptMappingChild(key) ?? throw new InvalidOperationException("Configuration not loaded");
+	public TChild GetFragment<TChild>(string key) where TChild : YamlNode =>
+		_root?.ExceptChild<TChild>(key) ?? throw new InvalidOperationException("Configuration not loaded");
 }

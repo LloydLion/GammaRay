@@ -13,6 +13,7 @@ using GammaRay.Core.Persistence;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Routing.Rules;
 using GammaRay.Core.Services;
 using GammaRay.Core.Services.Probing;
 using GammaRay.Core.Services.Probing.Drivers;
@@ -153,7 +154,7 @@ internal class Program
 			var endPointRoutingConfigurationRawProvider = new YAMLEndPointRoutingConfigurationRawProvider();
 			var apiConfigurationRawProvider = new YAMLAPIConfigurationRawProvider();
 
-			var routingGridRawProvider = new YAMLRoutingGridRawProvider();
+			var routingRuleRawProvider = new YAMLRoutingRuleRawProvider();
 
 			YAMLLoader.LoadSettings(settingsFile);
 
@@ -180,8 +181,8 @@ internal class Program
 			var endPointRoutingConfigurationProvider = new EndPointRoutingConfigurationProvider(endPointRoutingConfigurationRawProvider);
 			services.AddSingleton(endPointRoutingConfigurationProvider);
 
-			routingGridRawProvider.Initialize(YAMLLoader, networkProfileProvider, endPointCategoryProvider, endPointRoutingConfigurationProvider);
-			var routingGridProvider = new RoutingGridProvider(routingGridRawProvider);
+			routingRuleRawProvider.Initialize(YAMLLoader, endPointRoutingConfigurationProvider);
+			var routingGridProvider = new RoutingRulesProvider(routingRuleRawProvider);
 			services.AddSingleton(routingGridProvider);
 
 			apiConfigurationRawProvider.Initialize(YAMLLoader);

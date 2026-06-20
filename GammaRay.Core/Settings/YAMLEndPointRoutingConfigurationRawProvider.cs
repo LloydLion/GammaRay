@@ -23,7 +23,7 @@ public sealed class YAMLEndPointRoutingConfigurationRawProvider : IRawSettingsPr
 	public void Initialize(YAMLConfigurationLoader YAMLLoader, InternetAccessPointProvider internetAccessPointProvider)
 	{
 		_endpointRoutingConfigurations = LoadEndpointRoutingConfigurations(
-			YAMLLoader.GetFragment("endpointRoutingConfigurations"),
+			YAMLLoader.GetFragment<YamlMappingNode>("endpointRoutingConfigurations"),
 			internetAccessPointProvider.PlainInternetAccessPoints
 		);
 	}

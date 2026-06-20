@@ -22,7 +22,7 @@ public sealed class YAMLAPIConfigurationRawProvider : IRawSettingsProvider<APICo
 
 	public void Initialize(YAMLConfigurationLoader YAMLLoader)
 	{
-		_configuration = LoadAPIConfiguration(YAMLLoader.GetFragment("api"));
+		_configuration = LoadAPIConfiguration(YAMLLoader.GetFragment<YamlMappingNode>("api"));
 	}
 
 	private static APIConfiguration LoadAPIConfiguration(YamlMappingNode node)

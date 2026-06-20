@@ -18,7 +18,7 @@ public class YAMLNetworkProfileRawProvider : IRawSettingsProvider<IReadOnlyColle
 
 	public void Initialize(YAMLConfigurationLoader YAMLLoader)
 	{
-		_profiles = LoadNetworkProfiles(YAMLLoader.GetFragment("networkProfiles"));
+		_profiles = LoadNetworkProfiles(YAMLLoader.GetFragment<YamlMappingNode>("networkProfiles"));
 	}
 
 	private static NetworkProfile[] LoadNetworkProfiles(YamlMappingNode node) =>

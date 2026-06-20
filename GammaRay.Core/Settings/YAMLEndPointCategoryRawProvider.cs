@@ -18,7 +18,7 @@ public class YAMLEndPointCategoryRawProvider(IFileSystemLocator _fileSystemLocat
 
 	public void Initialize(YAMLConfigurationLoader YAMLLoader)
 	{
-		_categories = LoadEndPointCategories(YAMLLoader.GetFragment("endPointCategories")).Values;
+		_categories = LoadEndPointCategories(YAMLLoader.GetFragment<YamlMappingNode>("endPointCategories")).Values;
 	}
 
 	private Dictionary<string, EndPointCategory> LoadEndPointCategories(YamlMappingNode node) =>

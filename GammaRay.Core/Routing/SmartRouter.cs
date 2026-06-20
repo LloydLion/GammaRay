@@ -5,6 +5,7 @@ using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Routing.Rules;
 using GammaRay.Core.Services;
 using GammaRay.Core.Services.Probing;
 using GammaRay.Core.Utils;
@@ -17,7 +18,7 @@ public sealed class SmartRouter(
 	INetworkIdentifier _networkIdentifier,
 	INetworkProfileMappingRepository _networkProfileRepository,
 	EndPointCategoriesProvider _endpointCategorizer,
-	RoutingGridProvider _routingGridResolver,
+	RoutingRulesProvider _routingRulesProvider,
 
 	IServiceRepository _serviceRepository,
 	ICapabilityDetector _capabilityDetector,
@@ -31,13 +32,12 @@ public sealed class SmartRouter(
 	public IAPChannel MakeRoutingDecision(RequestContext context)
 	{
 		var networkIdentity = _networkIdentifier.CurrentIdentity;
-		var networkProfile = _networkProfileRepository.GetProfileForOrNull(networkIdentity);
-		if (networkProfile is null)
-			throw new Exception("No internet connection detected");
+		var networkProfile = _networkProfileRepository.GetProfileForOrNull(networkIdentity) ?? throw new Exception("No internet connection detected");
 
 		var endPointCategory = _endpointCategorizer.Categorize(context.TargetEndPoint);
 
-		var routingConfiguration = _routingGridResolver.GetConfiguration(networkProfile, endPointCategory);
+		var routingContext = new RoutingContext(endPointCategory, networkProfile);
+		var routingConfiguration = _routingRulesProvider.Route(routingContext) ?? throw new Exception($"Invalid settings: no route for {routingContext}");
 		var IAPChain = routingConfiguration.GetExtendedIAPChain(_internetAccessPointProvider);
 
 

@@ -22,7 +22,7 @@ public class YAMLInternetAccessPointRawProvider : IRawSettingsProvider<IReadOnly
 	public void Initialize(YAMLConfigurationLoader YAMLLoader, NetworkProfileProvider networkProfileProvider)
 	{
 		_internetAccessPoints = LoadInternetAccessPoints(
-			YAMLLoader.GetFragment("internetAccessPoints"),
+			YAMLLoader.GetFragment<YamlMappingNode>("internetAccessPoints"),
 			networkProfileProvider.Profiles
 		);
 	}

@@ -21,7 +21,7 @@ public class YAMLCapabilityClassRawProvider : IRawSettingsProvider<IReadOnlyList
 
 	public void Initialize(YAMLConfigurationLoader YAMLLoader)
 	{
-		_capabilityClasses = LoadCapabilityClasses(YAMLLoader.GetFragment("capabilityClasses"));
+		_capabilityClasses = LoadCapabilityClasses(YAMLLoader.GetFragment<YamlMappingNode>("capabilityClasses"));
 	}
 
 	private static KeyValuePair<string, CapabilityClass>[] LoadCapabilityClasses(YamlMappingNode node) =>

@@ -19,7 +19,7 @@ public class YAMLInboundRawProvider : IRawSettingsProvider<IReadOnlyDictionary<s
 
 	public void Initialize(YAMLConfigurationLoader YAMLLoader)
 	{
-		_inbounds = LoadInbounds(YAMLLoader.GetFragment("inbounds"));
+		_inbounds = LoadInbounds(YAMLLoader.GetFragment<YamlMappingNode>("inbounds"));
 	}
 
 	private static Dictionary<string, InboundConfiguration> LoadInbounds(YamlMappingNode node) =>

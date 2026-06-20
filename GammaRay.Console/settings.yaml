@@ -58,9 +58,12 @@ endPointCategories:
   blockedInNonRussia:
     list: local.txt
 
-routingGrid:
-  profilesOrder: [ default ]
-  grid:
-    blockedInRussia: [ viaProxy ]
-    blockedInNonRussia: [ viaLocal ]
-    default: [ default ]
+routingRules:
+  - endPointCategory: blockedInRussia
+    networkProfile: default  
+    to: viaProxy
+
+  - endPointCategory: blockedInNonRussia
+    to: viaLocal
+
+  - to: default
