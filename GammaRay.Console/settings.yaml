@@ -1,7 +1,7 @@
 api:
   endPoints:
-    - protocol: network
-      configuration: 127.0.0.3:5000
+    - bindAddress: 127.0.0.3
+      port: 5000
 
 inbounds:
   hostHttpIn: http://127.0.0.3:2000

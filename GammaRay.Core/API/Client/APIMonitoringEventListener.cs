@@ -1,9 +1,9 @@
+using GammaRay.Core.API.Proto;
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Monitoring.Converters;
-using GammaRay.Core.Utils;
-using System.Diagnostics;
+using Google.Protobuf;
 using System.Reflection;
-using System.Text;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace GammaRay.Core.API.Client;
@@ -16,147 +16,76 @@ public sealed class APIMonitoringEventListener(IMonitoringSystem _targetSystem, 
 	private readonly JsonSerializerOptions _serializationOptions = serializerOptionsSource.JsonOptions;
 
 
-	public bool HandleEvent(IGammaRayAPIClient sender, ReadOnlySpan<byte> eventData)
+	public bool HandleEvent(IGammaRayAPIClient sender, MonitoringEvent eventData)
 	{
-		var eventType = (APIConstants.EventType)eventData[0];
-		var reader = new BufferReader(eventData, initialReadLength: 1);
-		switch (eventType)
+		switch (eventData.EventCase)
 		{
-			case APIConstants.EventType.MonitoringNewContext:
+			case MonitoringEvent.EventOneofCase.NewContext:
 				{
-					var creationTime = reader.ReadDateTime();
-					var id = reader.ReadGuid();
-					var type = reader.ReadStringToEnd(Encoding.UTF8);
-					
-					var context = new MonitoringContext(type, creationTime, _targetSystem, id);
+					var data = eventData.NewContext;
+					var id = GuidFromByteString(data.ContextId);
+
+					var context = new MonitoringContext(data.Type, data.CreationTime.ToDateTime(), _targetSystem, id);
 					var openContext = new StateFullOpenMonitoringContext(context);
 					_openMonitoringContexts[id] = openContext;
-					break;
+					return true;
 				}
-			case APIConstants.EventType.MonitoringCloseContext:
+			case MonitoringEvent.EventOneofCase.CloseContext:
 				{
-					var id = reader.ReadGuid();
+					var data = eventData.CloseContext;
+					var id = GuidFromByteString(data.ContextId);
 					if (_openMonitoringContexts.Remove(id, out var context))
 						context.MonitoringContext.Close();
-					break;
+					return true; ;
 				}
-			case APIConstants.EventType.MonitoringNewReport:
+			case MonitoringEvent.EventOneofCase.NewReport:
 				{
-					var contextId = reader.ReadGuid();
+					var data = eventData.NewReport;
+					var contextId = GuidFromByteString(data.ContextId);
 					if (_openMonitoringContexts.TryGetValue(contextId, out var context) == false)
 						throw new Exception($"Invalid event: unknown context id {contextId}");
 
-
-					var typeFullName = reader.ReadStringToEnd(Encoding.UTF8);
+					var typeFullName = data.ReportType;
 					var reportType = typeof(GammaRayAPIClient).Assembly.GetType(typeFullName, false)
 						?? throw new Exception($"Invalid event: unknown report type {typeFullName}");
 
 					var newReport = context.MonitoringContext.NewReport(reportType);
 					context.OpenReports[newReport.Component] = newReport;
+					return true;
 				}
-				break;
-			case APIConstants.EventType.MonitoringFinishReport:
+			case MonitoringEvent.EventOneofCase.FinishReport:
 				{
-					var contextId = reader.ReadGuid();
+					var data = eventData.FinishReport;
+					var contextId = GuidFromByteString(data.ContextId);
 					if (_openMonitoringContexts.TryGetValue(contextId, out var context) == false)
 						throw new Exception($"Invalid event: unknown context id {contextId}");
 
-					var component = reader.ReadStringWithLength(Encoding.UTF8);
+					var component = data.Component;
 					if (context.OpenReports.Remove(component, out var report))
 					{
 						report.ControlContextNotification(enableOnChangedNotification: false);
-						while (reader.RemainingLength != 0)
+
+						foreach (var property in data.JsonReport)
 						{
-							var propertyName = reader.ReadStringWithLength(Encoding.UTF8);
-							var declaration = report.ListProperties()[propertyName];
-
-							var propLength = reader.ReadInt();
-							if (propLength != 0)
-							{
-								var jsonValue = reader.UnreadBufferPart[..propLength];
-								reader.Advance(propLength);
-
-								GetSetSystemReportPropertyMethod(declaration.ValueType)(this, report, declaration, jsonValue);
-							}
+							var declaration = report.ListProperties()[property.Key];
+							GetSetSystemReportPropertyMethod(declaration.ValueType)(this, report, declaration, property.Value);
 						}
 
 						report.Finish();
 					}
-
+					return true;
 				}
-				break;
-			case APIConstants.EventType.MonitoringSetReportProperty:
-				{
-					var contextId = reader.ReadGuid();
-					if (_openMonitoringContexts.TryGetValue(contextId, out var context) == false)
-						throw new Exception($"Invalid event: unknown context id {contextId}");
-
-					var component = reader.ReadStringWithLength(Encoding.UTF8);
-					if (context.OpenReports.TryGetValue(component, out var report) == false)
-						throw new Exception($"Invalid event: unknown report {contextId}/{component}");
-
-					var propertyName = reader.ReadStringWithLength(Encoding.ASCII);
-					var declaration = report.ListProperties()[propertyName];
-					var jsonValue = reader.UnreadBufferPart;
-
-					GetSetSystemReportPropertyMethod(declaration.ValueType)(this, report, declaration, jsonValue);
-				}
-				break;
-			default:
-				return false;
 		}
 
-		return true;
+		return false;
 	}
 
-	public void FitPendingEvents(Span<byte> span)
+	private static Guid GuidFromByteString(ByteString bytes)
 	{
-		var reader = new BufferReader(span);
-		while (reader.RemainingLength > 0)
-		{
-			var contextCreationTime = reader.ReadDateTime();
-			var contextId = reader.ReadGuid();
-			var contextType = reader.ReadStringWithLength(Encoding.UTF8);
-
-			var context = new MonitoringContext(contextType, contextCreationTime, _targetSystem, contextId);
-			var openContext = new StateFullOpenMonitoringContext(context);
-			_openMonitoringContexts[contextId] = openContext;
-
-			var reportCount = reader.ReadInt();
-			for (int i = 0; i < reportCount; i++)
-			{
-				var reportTypeName = reader.ReadStringWithLength(Encoding.UTF8);
-				var reportType = typeof(GammaRayAPIClient).Assembly.GetType(reportTypeName, false)
-					?? throw new Exception($"Invalid event: unknown report type {reportTypeName}");
-				var report = context.NewReport(reportType);
-				var finished = reader.ReadBoolean();
-
-				while (true)
-				{
-					var propertyNameLengthOrTerminator = reader.ReadInt();
-					if (propertyNameLengthOrTerminator == -1)
-						break;
-					var propertyName = reader.ReadString(Encoding.UTF8, propertyNameLengthOrTerminator);
-					var declaration = report.ListProperties()[propertyName];
-
-					var propLength = reader.ReadInt();
-					if (propLength != 0)
-					{
-						var jsonValue = reader.UnreadBufferPart[..propLength];
-						reader.Advance(propLength);
-
-						GetSetSystemReportPropertyMethod(declaration.ValueType)(this, report, declaration, jsonValue);
-					}
-				}
-
-				if (finished)
-					report.Finish();
-				else
-					openContext.OpenReports[report.Component] = report;
-			}
-
-			Debug.WriteLine($"CONTEXT restored: {contextType}/{contextId} with {reportCount} reports");
-		}
+		var id = new Guid();
+		var span = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref id, 1));
+		bytes.Span.CopyTo(span);
+		return id;
 	}
 
 	private static SetSystemReportPropertyDelegate GetSetSystemReportPropertyMethod(Type propertyValueType)
@@ -168,7 +97,7 @@ public sealed class APIMonitoringEventListener(IMonitoringSystem _targetSystem, 
 					name: nameof(SetSystemReportProperty),
 					genericParameterCount: 1,
 					bindingAttr: BindingFlags.Static | BindingFlags.NonPublic,
-					types: [typeof(APIMonitoringEventListener), typeof(SystemReport), typeof(SystemReportPropertyDeclaration), typeof(ReadOnlySpan<byte>)]
+					types: [typeof(APIMonitoringEventListener), typeof(SystemReport), typeof(SystemReportPropertyDeclaration), typeof(ReadOnlySpan<char>)]
 				)!
 				.MakeGenericMethod([propertyValueType])
 				.CreateDelegate<SetSystemReportPropertyDelegate>(target: null);
@@ -177,14 +106,14 @@ public sealed class APIMonitoringEventListener(IMonitoringSystem _targetSystem, 
 		return method;
 	}
 
-	private static void SetSystemReportProperty<TProperty>(APIMonitoringEventListener self, SystemReport report, SystemReportPropertyDeclaration property, ReadOnlySpan<byte> jsonValue)
+	private static void SetSystemReportProperty<TProperty>(APIMonitoringEventListener self, SystemReport report, SystemReportPropertyDeclaration property, ReadOnlySpan<char> jsonValue)
 	{
 		var value = JsonSerializer.Deserialize<TProperty>(jsonValue, self._serializationOptions);
 		report.WriteProperty(property.Name, value);
 	}
 
 
-	private delegate void SetSystemReportPropertyDelegate(APIMonitoringEventListener self, SystemReport report, SystemReportPropertyDeclaration property, ReadOnlySpan<byte> jsonValue);
+	private delegate void SetSystemReportPropertyDelegate(APIMonitoringEventListener self, SystemReport report, SystemReportPropertyDeclaration property, ReadOnlySpan<char> jsonValue);
 
 	private class StateFullOpenMonitoringContext(MonitoringContext monitoringContext)
 	{

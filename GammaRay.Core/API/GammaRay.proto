@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package GammaRay.Core.API;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "GammaRay.Core.API.Proto";
+
+service GammaRayService {
+	rpc GetAPIVersion(Empty) returns (VersionResponse);
+	rpc GetCurrentSettingsFile(Empty) returns (SettingsFileResponse);
+	rpc UploadNewSettingsFile(SettingsFileRequest) returns (Empty);
+	rpc ReloadApplication(Empty) returns (Empty);
+	rpc SubscribeEvents(Empty) returns (stream MonitoringEvent);
+}
+
+message Empty { }
+
+message VersionResponse {
+	int32 version = 1;
+}
+
+message SettingsFileResponse {
+	string content = 1;
+}
+
+message SettingsFileRequest {
+	string content = 1;
+}
+
+message MonitoringEvent {
+	oneof event {
+		NewContextEvent newContext = 1;
+		CloseContextEvent closeContext = 2;
+		NewReportEvent newReport = 3;
+		FinishReportEvent finishReport = 4;
+	}
+
+	enum SyncronizationType {
+		NonBuffered = 0;
+		Buffered = 1;
+		LastBuffered = 2;
+	}
+	SyncronizationType type = 5;
+}
+
+message NewContextEvent {
+	google.protobuf.Timestamp creationTime = 1;
+	bytes contextId = 2;
+	string type = 3;
+}
+
+message CloseContextEvent {
+	bytes contextId = 1;
+}
+
+message NewReportEvent {
+	bytes contextId = 1;
+	string reportType = 2;
+}
+
+message FinishReportEvent {
+	bytes contextId = 1;
+	string component = 2;
+	map<string, string> jsonReport = 3;
+}

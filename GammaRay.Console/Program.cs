@@ -87,13 +87,10 @@ internal class Program
 				.AddSingleton<MonitoringEventBuffer>()
 				.AddSingleton<MonitoringSerializerOptionsSource>()
 				
-				.AddSingleton<IAPIEndPointDriver, NetworkAPIEndPointDriver>()
-				.AddSingleton<IDriverRegistry<IAPIEndPointDriver>, ReflectionBasedDriverRegistry<IAPIEndPointDriver>>()
+				.AddSingleton<GammaRayApiService>()
 				.AddSingleton<APIServer>()
 
 				.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
-
-			sp.GetRequiredService<APIBasedMonitoringSystem>().Initialize();
 
 			((NetworkIdentifierBase)sp.GetRequiredService<INetworkIdentifier>()).Initialize();
 

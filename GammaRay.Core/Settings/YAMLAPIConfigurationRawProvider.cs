@@ -3,6 +3,7 @@ using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.Network;
 using GammaRay.Core.Routing.NetworkProfiles;
+using System.Net;
 using YamlDotNet.RepresentationModel;
 
 namespace GammaRay.Core.Settings;
@@ -29,9 +30,9 @@ public sealed class YAMLAPIConfigurationRawProvider : IRawSettingsProvider<APICo
 	{
 		var endPoints = node.ExceptChild<YamlSequenceNode>("endPoints").Select(node =>
 		{
-			var protocol = node["protocol"].Bind<string>();
-			var configurationString = node["configuration"].Bind<string>();
-			return new APIEndpointInformation(protocol, configurationString);
+			var bindAddress = IPAddress.Parse(node["bindAddress"].Bind<string>());
+			var port = node["port"].Bind<int>();
+			return new APIEndpointInformation(bindAddress, port);
 		})
 		.ToArray();
 

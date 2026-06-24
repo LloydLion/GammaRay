@@ -25,16 +25,15 @@ AsyncContext.Run(async () =>
 		Console.WriteLine("╚══════════════════════════════════════════════════════════════════════════════╝");
 		Console.WriteLine();
 
-		var apiClient = new GammaRayAPIClient(TimeProvider.System, Options.Create(new GammaRayAPIClient.Options()));
-		var networkDriver = new NetworkAPIEndPointDriver();
+		var apiClient = new GammaRayAPIClient();
 
-		Console.Write("Enter server address (default: 127.0.0.3:5000): ");
+		Console.Write("Enter server address (default: 127.0.0.3): ");
 		var serverAddress = Console.ReadLine();
 		if (string.IsNullOrWhiteSpace(serverAddress))
-			serverAddress = "127.0.0.3:5000";
+			serverAddress = "127.0.0.3";
 
 		Console.WriteLine("\nConnecting to server...");
-		await apiClient.ConnectAsync(networkDriver, serverAddress);
+		await apiClient.ConnectAsync(serverAddress, 5000);
 		Console.WriteLine("✓ Connected!");
 
 		Console.WriteLine("Checking API version...");
@@ -51,12 +50,6 @@ AsyncContext.Run(async () =>
 		var apiMonitoringEventListener = new APIMonitoringEventListener(tuiMonitoring, serializerOptionsSource);
 
 		apiClient.AddEventListener(apiMonitoringEventListener);
-
-		Console.WriteLine("Enabling monitoring...");
-		var pendingEventsBuffer = new byte[APIConstants.MaxMessageSize];
-		var wroteToPendingEventsBuffer = await apiClient.ControlMonitoringAsync(APIConstants.MonitoringMode.EnabledWithReportProperties, pendingEventsBuffer);
-		apiMonitoringEventListener.FitPendingEvents(pendingEventsBuffer.AsSpan(..wroteToPendingEventsBuffer));
-		Console.WriteLine("✓ Monitoring enabled!");
 
 		redrawUI(tuiMonitoring);
 

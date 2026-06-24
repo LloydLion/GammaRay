@@ -1,14 +1,10 @@
+using System.Net;
+
 namespace GammaRay.Core.API;
 
-public sealed class APIEndpointInformation(string protocol, string configurationString)
+public sealed class APIEndpointInformation(IPAddress bindAddress, int port)
 {
-	public string Protocol { get; } = protocol;
+	public IPAddress BindAddress { get; } = bindAddress;
 
-	public string ConfigurationString { get; } = configurationString;
-
-
-	public override string ToString()
-	{
-		return $"APIEndpoint {{{Protocol}:{ConfigurationString}}}";
-	}
+	public int Port { get; } = port;
 }

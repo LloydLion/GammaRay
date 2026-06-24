@@ -5,6 +5,4 @@ namespace GammaRay.Core.API;
 public sealed class APIConfigurationProvider(IRawSettingsProvider<APIConfiguration> _configurationProvider)
 {
 	public APIConfiguration Configuration { get; } = _configurationProvider.Get();
-
-	public IReadOnlyCollection<APIEndpointInformation> EndPoints => Configuration.EndPoints;
 }
