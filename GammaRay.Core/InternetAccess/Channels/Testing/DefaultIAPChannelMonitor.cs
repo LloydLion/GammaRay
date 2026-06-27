@@ -19,7 +19,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 	private readonly INetworkIdentifier _networkIdentifier;
 	private readonly INetworkProfileMappingRepository _networkProfileMapping;
 	private readonly IIAPChannelSimpleTester _simpleChannelTester;
-	private readonly IMonitoringSystem _monitoringSystem;
+	private readonly MonitoringSystem _monitoringSystem;
 	private readonly Options _options;
 	private ActivationContext? _act;
 	private long _lastRepositorySave = 0;
@@ -37,7 +37,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		InternetAccessPointProvider internetAccessPointProvider,
 
 		IOptions<Options> options,
-		IMonitoringSystem monitoringSystem
+		MonitoringSystem monitoringSystem
 	)
 	{
 		_dataRepository = dataRepository;
@@ -206,11 +206,12 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		private async void StartUpdate()
 		{
 			_isUpdateRunning = true;
+
+			var procedure = TrackableProcedure.New("Testing", _owner._timeProvider, _owner._monitoringSystem);
 			try
 			{
-				using var monitoringContext = new MonitoringContext("Testing", _owner._timeProvider, _owner._monitoringSystem);
 				
-				var testResult = await PerformTestAsync(monitoringContext);
+				var testResult = await PerformTestAsync(procedure);
 
 				if (!CheckNetwork()) return;
 
@@ -257,17 +258,25 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 					_available
 				);
 
-				using var report = monitoringContext.NewReport<Report>();
-				report.InternetAccessPoint = _channel.IAP;
-				report.ChannelName = _channel.IAP.InverseChannels[_channel.Channel];
-				report.NetworkProfile = _network;
-				report.WAQSuccessCount = successInWAQ;
-				report.ObservationRowLength = _observationRow.ValidityLength;
-				report.NewStatus = Status;
+				procedure.CommitReport(new Report
+				{
+					InternetAccessPoint = _channel.IAP,
+					ChannelName = _channel.IAP.InverseChannels[_channel.Channel],
+					NetworkProfile = _network,
+					WAQSuccessCount = successInWAQ,
+					ObservationRowLength = _observationRow.ValidityLength,
+					NewStatus = Status
+				});
+
 			}
-			catch (Exception ex) { Debugger.BreakForUserUnhandledException(ex); }
+			catch (Exception ex)
+			{
+				Debugger.BreakForUserUnhandledException(ex);
+				procedure.SetFatalException(ex);
+			}
 			finally
 			{
+				procedure.Finish();
 				_isUpdateRunning = false;
 			}
 		}
@@ -279,7 +288,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 
 		private bool CheckNetwork() => _owner._networkProfileMapping.GetProfileForOrNull(_owner._networkIdentifier.CurrentIdentity) == _network;
 
-		private async ValueTask<TestResult> PerformTestAsync(MonitoringContext monitoring)
+		private async ValueTask<TestResult> PerformTestAsync(TrackableProcedure monitoring)
 		{
 			var start = _owner._timeProvider.GetTimestamp();
 			bool success = false;
@@ -433,18 +442,19 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		public bool IsSuccess => AccessTime is not null;
 	}
 
-	public class Report() : SystemReport(nameof(DefaultIAPChannelMonitor))
+	[SystemReportMetadata(nameof(IIAPChannelMonitor), nameof(DefaultIAPChannelMonitor), "Update")]
+	public class Report() : SystemReport()
 	{
-		public ReportProperty<InternetAccessPoint> InternetAccessPoint { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<InternetAccessPoint> InternetAccessPoint { get; set; }
 
-		public ReportProperty<string> ChannelName { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<string> ChannelName { get; set; }
 
-		public ReportProperty<NetworkProfile> NetworkProfile { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<NetworkProfile> NetworkProfile { get; set; }
 
-		public ReportProperty<int> WAQSuccessCount { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<int> WAQSuccessCount { get; set; }
 
-		public ReportProperty<int> ObservationRowLength { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<int> ObservationRowLength { get; set; }
 
-		public ReportProperty<IAPChannelStatus> NewStatus { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<IAPChannelStatus> NewStatus { get; set; }
 	}
 }

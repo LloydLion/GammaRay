@@ -78,15 +78,14 @@ internal class Program
 
 				.AddSingleton<SmartRouter>()
 
-				.AddSingleton<ConsoleMonitoringSystem>()
-				.AddSingleton<APIBasedMonitoringSystem>()
-				.AddSingleton<IMonitoringSystem, MultiHeadMonitoringSystem>(sp => new([
-					sp.GetRequiredService<ConsoleMonitoringSystem>(),
-					sp.GetRequiredService<APIBasedMonitoringSystem>()
-				]))
-				.AddSingleton<MonitoringEventBuffer>()
+				.AddSingleton<IMonitoringProvider, ConsoleMonitoringProvider>()
+				.AddSingleton<IMonitoringProvider>(sp => sp.GetRequiredService<APIBasedMonitoringProvider>())
+				.AddSingleton<MonitoringSystem>()
+				.AddSingleton(sp => sp.GetRequiredService<MonitoringSystem>().Context)
 				.AddSingleton<MonitoringSerializerOptionsSource>()
-				
+
+
+				.AddSingleton<APIBasedMonitoringProvider>()
 				.AddSingleton<GammaRayApiService>()
 				.AddSingleton<APIServer>()
 

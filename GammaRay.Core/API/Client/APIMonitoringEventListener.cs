@@ -8,11 +8,11 @@ using System.Text.Json;
 
 namespace GammaRay.Core.API.Client;
 
-public sealed class APIMonitoringEventListener(IMonitoringSystem _targetSystem, MonitoringSerializerOptionsSource serializerOptionsSource) : IAPIEventListener
+public sealed class APIMonitoringEventListener(MonitoringSystem _targetSystem, MonitoringSerializerOptionsSource serializerOptionsSource) : IAPIEventListener
 {
 	private static readonly Dictionary<Type, SetSystemReportPropertyDelegate> ConstructedSetSystemReportPropertyMethods = [];
 
-	private readonly Dictionary<Guid, StateFullOpenMonitoringContext> _openMonitoringContexts = [];
+
 	private readonly JsonSerializerOptions _serializationOptions = serializerOptionsSource.JsonOptions;
 
 
@@ -20,59 +20,46 @@ public sealed class APIMonitoringEventListener(IMonitoringSystem _targetSystem, 
 	{
 		switch (eventData.EventCase)
 		{
-			case MonitoringEvent.EventOneofCase.NewContext:
+			case MonitoringEvent.EventOneofCase.NewProcedure:
 				{
-					var data = eventData.NewContext;
-					var id = GuidFromByteString(data.ContextId);
+					var data = eventData.NewProcedure;
+					var id = GuidFromByteString(data.ProcedureId);
 
-					var context = new MonitoringContext(data.Type, data.CreationTime.ToDateTime(), _targetSystem, id);
-					var openContext = new StateFullOpenMonitoringContext(context);
-					_openMonitoringContexts[id] = openContext;
+					var context = TrackableProcedure.New(data.Type, data.CreationTime.ToDateTime(), _targetSystem, id);
+
 					return true;
 				}
-			case MonitoringEvent.EventOneofCase.CloseContext:
+			case MonitoringEvent.EventOneofCase.FinishProcedure:
 				{
-					var data = eventData.CloseContext;
-					var id = GuidFromByteString(data.ContextId);
-					if (_openMonitoringContexts.Remove(id, out var context))
-						context.MonitoringContext.Close();
-					return true; ;
-				}
-			case MonitoringEvent.EventOneofCase.NewReport:
-				{
-					var data = eventData.NewReport;
-					var contextId = GuidFromByteString(data.ContextId);
-					if (_openMonitoringContexts.TryGetValue(contextId, out var context) == false)
-						throw new Exception($"Invalid event: unknown context id {contextId}");
+					var data = eventData.FinishProcedure;
+					var id = GuidFromByteString(data.ProcedureId);
 
-					var typeFullName = data.ReportType;
-					var reportType = typeof(GammaRayAPIClient).Assembly.GetType(typeFullName, false)
-						?? throw new Exception($"Invalid event: unknown report type {typeFullName}");
+					var procedure = _targetSystem.Context.Procedures[id];
 
-					var newReport = context.MonitoringContext.NewReport(reportType);
-					context.OpenReports[newReport.Component] = newReport;
+					if (data.IsSuccessful == false)
+						procedure.SetFatalException(new RemoteException(data.ExceptionMessage));
+					procedure.Finish();
+
 					return true;
 				}
-			case MonitoringEvent.EventOneofCase.FinishReport:
+			case MonitoringEvent.EventOneofCase.CommitReport:
 				{
-					var data = eventData.FinishReport;
-					var contextId = GuidFromByteString(data.ContextId);
-					if (_openMonitoringContexts.TryGetValue(contextId, out var context) == false)
-						throw new Exception($"Invalid event: unknown context id {contextId}");
+					var data = eventData.CommitReport;
+					var id = GuidFromByteString(data.ProcedureId);
 
-					var component = data.Component;
-					if (context.OpenReports.Remove(component, out var report))
+					var procedure = _targetSystem.Context.Procedures[id];
+
+					var classId = data.ClassIdentification;
+					var report = SystemReport.CreateNewReportByClassIdentification(classId);
+
+					foreach (var property in data.JsonReport)
 					{
-						report.ControlContextNotification(enableOnChangedNotification: false);
-
-						foreach (var property in data.JsonReport)
-						{
-							var declaration = report.ListProperties()[property.Key];
-							GetSetSystemReportPropertyMethod(declaration.ValueType)(this, report, declaration, property.Value);
-						}
-
-						report.Finish();
+						var declaration = report.ListProperties()[property.Key];
+						GetSetSystemReportPropertyMethod(declaration.ValueType)(this, report, declaration, property.Value);
 					}
+
+					procedure.CommitReport(report);
+
 					return true;
 				}
 		}
@@ -115,10 +102,5 @@ public sealed class APIMonitoringEventListener(IMonitoringSystem _targetSystem, 
 
 	private delegate void SetSystemReportPropertyDelegate(APIMonitoringEventListener self, SystemReport report, SystemReportPropertyDeclaration property, ReadOnlySpan<char> jsonValue);
 
-	private class StateFullOpenMonitoringContext(MonitoringContext monitoringContext)
-	{
-		public MonitoringContext MonitoringContext { get; } = monitoringContext;
-
-		public Dictionary<string, SystemReport> OpenReports { get; } = [];
-	}
+	public class RemoteException(string message) : Exception($"Procedure finished with exception on remote, received message: {(string.IsNullOrEmpty(message) ? "No message" : message)}");
 }

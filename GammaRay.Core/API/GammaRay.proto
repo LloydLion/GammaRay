@@ -30,10 +30,9 @@ message SettingsFileRequest {
 
 message MonitoringEvent {
 	oneof event {
-		NewContextEvent newContext = 1;
-		CloseContextEvent closeContext = 2;
-		NewReportEvent newReport = 3;
-		FinishReportEvent finishReport = 4;
+		NewProcedureEvent newProcedure = 1;
+		CommitReportEvent commitReport = 2;
+		FinishProcedureEvent finishProcedure = 3;
 	}
 
 	enum SyncronizationType {
@@ -44,23 +43,20 @@ message MonitoringEvent {
 	SyncronizationType type = 5;
 }
 
-message NewContextEvent {
-	google.protobuf.Timestamp creationTime = 1;
-	bytes contextId = 2;
-	string type = 3;
+message NewProcedureEvent {
+	bytes procedureId = 1;
+	string type = 2;
+	google.protobuf.Timestamp creationTime = 3;
 }
 
-message CloseContextEvent {
-	bytes contextId = 1;
-}
-
-message NewReportEvent {
-	bytes contextId = 1;
-	string reportType = 2;
-}
-
-message FinishReportEvent {
-	bytes contextId = 1;
-	string component = 2;
+message CommitReportEvent {
+	bytes procedureId = 1;
+	string classIdentification = 2;
 	map<string, string> jsonReport = 3;
+}
+
+message FinishProcedureEvent {
+	bytes procedureId = 1;
+	bool isSuccessful = 2;
+	string exceptionMessage = 3;
 }

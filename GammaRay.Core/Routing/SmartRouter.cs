@@ -107,13 +107,13 @@ public sealed class SmartRouter(
 		throw new Exception("Good game, well played, there is just no way to route this shit");
 
 	returnResult:
-		PrintReport(result, context, networkProfile, endPointCategory, routingConfiguration, service, statusTableDec);
+		CommitReport(result, context, networkProfile, endPointCategory, routingConfiguration, service, statusTableDec);
 
 		return result.Channel;
 	}
 
 
-	private void PrintReport((InternetAccessPoint IAP, IAPChannel Channel) result,
+	private void CommitReport((InternetAccessPoint IAP, IAPChannel Channel) result,
 		RequestContext context,
 		NetworkProfile profile,
 		EndPointCategory endPointCategory,
@@ -122,35 +122,36 @@ public sealed class SmartRouter(
 		Decayable<ServiceStatusTable>? statusTable
 	)
 	{
-		using var report = context.MonitoringContext.NewReport<Report>();
+		var report = new Report
+		{
+			ResultIAP = result.IAP,
+			ResultChannelName = result.IAP.InverseChannels[result.Channel],
+			NetworkProfile = profile,
+			EndPointCategory = endPointCategory,
+			RoutingConfiguration = routingConfiguration,
+			CapabilityClass = service.Capability.Class,
+			StatusTable = statusTable?.Value
+		};
 
-		report.ResultIAP = result.IAP;
-		report.ResultChannelName = result.IAP.InverseChannels[result.Channel];
-		report.NetworkProfile = profile;
-		report.EndPointCategory = endPointCategory;
-		report.RoutingConfiguration = routingConfiguration;
-		report.CapabilityClass = service.Capability.Class;
-
-		if (statusTable is not null)
-			report.StatusTable = statusTable.Value.Value;
-		else report.StatusTable = null;
+		context.TrackableProcedure.CommitReport(report);
 	}
 
 
-	public class Report() : SystemReport(nameof(SmartRouter))
+	[SystemReportMetadata(nameof(IRouter), nameof(SmartRouter), "MakeRouteDecision")]
+	public class Report() : SystemReport()
 	{
-		public ReportProperty<InternetAccessPoint> ResultIAP { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<InternetAccessPoint> ResultIAP { get; set; }
 
-		public ReportProperty<string> ResultChannelName { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<string> ResultChannelName { get; set; }
 
-		public ReportProperty<NetworkProfile> NetworkProfile { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<NetworkProfile> NetworkProfile { get; set; }
 
-		public ReportProperty<EndPointCategory> EndPointCategory { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<EndPointCategory> EndPointCategory { get; set; }
 
-		public ReportProperty<EndPointRoutingConfiguration> RoutingConfiguration { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<EndPointRoutingConfiguration> RoutingConfiguration { get; set; }
 
-		public ReportProperty<CapabilityClass> CapabilityClass { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<CapabilityClass> CapabilityClass { get; set; }
 
-		public ReportProperty<ServiceStatusTable?> StatusTable { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<ServiceStatusTable?> StatusTable { get; set; }
 	}
 }

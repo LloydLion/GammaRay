@@ -19,7 +19,7 @@ public sealed class ProbingManager(
 	INetworkIdentifier _networkIdentifier,
 	INetworkProfileMappingRepository _networkProfileRepository,
 
-	IMonitoringSystem _monitoringSystem,
+	MonitoringSystem _monitoringSystem,
 	TimeProvider _time,
 
 	IOptions<ProbingManager.Options> options
@@ -47,8 +47,8 @@ public sealed class ProbingManager(
 		await Task.Yield();
 
 		var start = _time.GetUtcNow().UtcDateTime;
-		using var context = new MonitoringContext("Probing", start, _monitoringSystem);
-		using var report = context.NewReport<ProbingTaskReport>();
+		using var procedure = TrackableProcedure.New("Probing", start, _monitoringSystem);
+		using var report = new ProbingTaskReport(procedure);
 		report.Service = service;
 		report.InternetAccessPoints = ReportProperty.Create(pointsToProbeVia);
 
@@ -74,7 +74,7 @@ public sealed class ProbingManager(
 				var (channelStatus, channel) = searchResult.Value;
 				var channelDriver = _channelDriverRegistry.ProvideDriver(channel.DriverName);
 
-				var rawStatus = await PerformProbeAsync(driver, channelDriver, IAP, channel, endPoint, materializedParameters, context);
+				var rawStatus = await PerformProbeAsync(driver, channelDriver, IAP, channel, endPoint, materializedParameters, procedure);
 				// Consider null in rawStatus as failed probe with no result (positive or negative)
 				if (rawStatus is null)
 					continue;
@@ -110,10 +110,10 @@ public sealed class ProbingManager(
 		IAPChannel channel,
 		WebEndPoint endPoint,
 		IReadOnlyDictionary<string, string> materializedParameters,
-		MonitoringContext monitoringContext
+		TrackableProcedure procedure
 	)
 	{
-		using var report = monitoringContext.NewReport<IAPProbingReport>();
+		using var report = new IAPProbingReport(procedure);
 		report.InternetAccessPoint = IAP;
 		report.ChannelName = IAP.InverseChannels[channel];
 		var accMetric = TimeSpan.Zero;
@@ -131,7 +131,7 @@ public sealed class ProbingManager(
 				threatAsSuccessProbe = false;
 			else // ChannelOpeningResult.ResultType.Success
 			{
-				var args = new ProbingArgs(openingResult.OpenChannel.GetFlow(), endPoint, materializedParameters, _options.ProbeOptions, _time, monitoringContext);
+				var args = new ProbingArgs(openingResult.OpenChannel.GetFlow(), endPoint, materializedParameters, _options.ProbeOptions, _time, procedure);
 				var probeResult = await driver.ProbeAsync(args);
 				accMetric += probeResult.ProbeDuration;
 
@@ -222,27 +222,29 @@ public sealed class ProbingManager(
 		}
 	}
 
-	private class ProbingTaskReport() : SystemReport($"{nameof(ProbingManager)}/ProbingTask")
+	[SystemReportMetadata(nameof(IProbingManager), nameof(ProbingManager), "ProbingTask")]
+	private class ProbingTaskReport(TrackableProcedure? autoBind = null) : SystemReport(autoBind)
 	{
-		public ReportProperty<Service> Service { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<Service> Service { get; set; }
 
-		public ReportProperty<string> DriverName { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<string> DriverName { get; set; }
 
-		public ReportProperty<IReadOnlyCollection<InternetAccessPoint>> InternetAccessPoints { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<IReadOnlyCollection<InternetAccessPoint>> InternetAccessPoints { get; set; }
 
-		public ReportProperty<IReadOnlyDictionary<string, string>> ProbingParameters { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<IReadOnlyDictionary<string, string>> ProbingParameters { get; set; }
 
-		public ReportProperty<ServiceStatusTable> Result { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<ServiceStatusTable> Result { get; set; }
 
-		public ReportProperty<Exception> Exception { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<Exception> Exception { get; set; }
 	}
 
-	private class IAPProbingReport() : SystemReport($"{nameof(ProbingManager)}/IAPProbing")
+	[SystemReportMetadata(nameof(IProbingManager), nameof(ProbingManager), "IAPProbing")]
+	private class IAPProbingReport(TrackableProcedure? autoBind = null) : SystemReport(autoBind)
 	{
-		public ReportProperty<InternetAccessPoint> InternetAccessPoint { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<InternetAccessPoint> InternetAccessPoint { get; set; }
 
-		public ReportProperty<string> ChannelName { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<string> ChannelName { get; set; }
 
-		public ReportProperty<ServiceIAPStatus> Result { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<ServiceIAPStatus> Result { get; set; }
 	}
 }

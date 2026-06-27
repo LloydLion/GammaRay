@@ -22,13 +22,13 @@ public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 
 	public async Task<ProbeResult> ProbeAsync(ProbingArgs args)
 	{
-		var (targetOutcomingFlow, endPoint, parameters, options, time, monitoringContext) =
+		var (targetOutcomingFlow, endPoint, parameters, options, time, trackingProcedure) =
 			(args.TargetOutcomingFlow, args.EndPoint, args.Parameters, args.Options, args.TimeProvider, args.MonitoringContext);
 
 		if (targetOutcomingFlow is not IStreamDataFlow streamDataFlow)
 			throw new ArgumentException("Only stream based data flows supported", nameof(args));
 
-		using var report = monitoringContext.NewReport<Report>();
+		using var report = new Report(trackingProcedure);
 
 		var strongParameters = ParseParameters(parameters);
 		report.Parameters = strongParameters;
@@ -166,15 +166,16 @@ public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 
 	public record StrongParameters(bool UseTLS, string Path, string Method, string UserAgent, bool RequireNonErrorStatusCode, int MaxRedirectCount);
 
-	public class Report() : SystemReport(nameof(HTTPProbingDriver))
+	[SystemReportMetadata(nameof(IProbeDriver), nameof(HTTPProbingDriver), "Probe")]
+	public class Report(TrackableProcedure? autoBind = null) : SystemReport(autoBind)
 	{
-		public ReportProperty<StrongParameters> Parameters { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<StrongParameters> Parameters { get; set; }
 
-		public ReportProperty<int> ResponseStatusCode { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<int> ResponseStatusCode { get; set; }
 
-		public ReportProperty<long> TotalResponseBodyLength { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<long> TotalResponseBodyLength { get; set; }
 
-		public ReportProperty<ProbeResult> Result { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<ProbeResult> Result { get; set; }
 	}
 
 	private readonly struct ResultHelper(TimeProvider _time, long _startTime, Report _report, StrongParameters _parameters)

@@ -16,13 +16,13 @@ namespace GammaRay.Core.Inbound;
 [RecommendedDriverName("http")]
 public sealed class HTTPInboundDriver(
 	TimeProvider _time,
-	IMonitoringSystem _monitoringSystem,
+	MonitoringSystem _monitoringSystem,
 	IOptions<HTTPInboundDriver.Options> options
 ) : IInboundDriver
 {
 	private readonly Options _options = options.Value;
 	private readonly TimeProvider _time = _time;
-	private readonly IMonitoringSystem _monitoringSystem = _monitoringSystem;
+	private readonly MonitoringSystem _monitoringSystem = _monitoringSystem;
 
 
 	public IInbound CreateInbound(IPEndPoint localEndPoint)
@@ -91,6 +91,9 @@ public sealed class HTTPInboundDriver(
 		{
 			await Task.Yield();
 
+			var now = _owner._time.GetUtcNow().UtcDateTime;
+			using var procedure = TrackableProcedure.New("Connection", now, _owner._monitoringSystem);
+
 			try
 			{
 				bool shouldKeepConnection;
@@ -104,9 +107,7 @@ public sealed class HTTPInboundDriver(
 					// -- Prepare to processing
 					RequestContext requestContext;
 
-					var now = _owner._time.GetUtcNow().UtcDateTime;
-					using var monitoring = new MonitoringContext("Connection", now, _owner._monitoringSystem);
-					using (var report = monitoring.NewReport<Report>())
+					using (var report = new Report(procedure))
 					{
 						report.RemoteEndPoint = (IPEndPoint)clientContext.Socket.RemoteEndPoint!;
 
@@ -125,7 +126,7 @@ public sealed class HTTPInboundDriver(
 						requestContext = new RequestContext(
 							new WebEndPoint(destinationEndPoint.Value, TransportType.StreamBased),
 							FormIncomingDataFlow(clientContext, header, destinationEndPoint.Value, requestType),
-							now, monitoring
+							now, procedure
 						);
 
 						// -- Write response
@@ -146,7 +147,10 @@ public sealed class HTTPInboundDriver(
 				}
 				while (shouldKeepConnection);
 			}
-			catch (Exception) { }
+			catch (Exception ex)
+			{
+				procedure.SetFatalException(ex);
+			}
 			finally
 			{
 				clientContext.Dispose();
@@ -206,12 +210,15 @@ public sealed class HTTPInboundDriver(
 
 	}
 
-	public class Report() : SystemReport(nameof(HTTPInboundDriver))
+	[SystemReportMetadata(nameof(IInboundDriver), nameof(HTTPInboundDriver), "HandleRequest")]
+	public class Report(TrackableProcedure? autoBind = null) : SystemReport(autoBind)
 	{
-		public ReportProperty<IPEndPoint> RemoteEndPoint { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<IPEndPoint> RemoteEndPoint { get; set; }
 
-		public ReportProperty<GenericWebEndPoint> DestinationEndPoint { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<GenericWebEndPoint> DestinationEndPoint { get; set; }
 
-		public ReportProperty<bool> ShouldKeepConnectionAlive { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<bool> ShouldKeepConnectionAlive { get; set; }
+
+		public ReportProperty<string> UserAgent { get; set; }
 	}
 }

@@ -4,7 +4,7 @@ using GammaRay.Core.Network.Flow;
 
 namespace GammaRay.Core.Inbound;
 
-public sealed class RequestContext(WebEndPoint targetEndPoint, IDataFlow incomingDataFlow, DateTime initialTime, MonitoringContext monitoringContext)
+public sealed class RequestContext(WebEndPoint targetEndPoint, IDataFlow incomingDataFlow, DateTime initialTime, TrackableProcedure procedure)
 {
 	public WebEndPoint TargetEndPoint { get; } = targetEndPoint;
 
@@ -12,5 +12,5 @@ public sealed class RequestContext(WebEndPoint targetEndPoint, IDataFlow incomin
 
 	public DateTime InitialTime { get; } = initialTime;
 
-	public MonitoringContext MonitoringContext { get; } = monitoringContext;
+	public TrackableProcedure TrackableProcedure { get; } = procedure;
 }

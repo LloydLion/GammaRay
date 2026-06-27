@@ -16,7 +16,7 @@ public sealed class IAPChannelSimpleTester(
 	private readonly HttpUri _uri = HttpUri.Parse(options.Value.TestUri);
 
 
-	public async ValueTask<bool> PerformTestAsync(IAPChannel channel, CancellationToken cancellation, MonitoringContext monitoring)
+	public async ValueTask<bool> PerformTestAsync(IAPChannel channel, CancellationToken cancellation, TrackableProcedure monitoring)
 	{
 		var endPoint = new WebEndPoint(_uri.EndPoint!.Value, TransportType.StreamBased);
 		var openingResult = await _driverRegistry

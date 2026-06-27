@@ -5,7 +5,7 @@ using GammaRay.Core.Routing;
 
 namespace GammaRay.Client.TUI;
 
-public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDisposable
+public sealed class ConnectionTrackingMonitoringSystem : IMonitoringProvider, IDisposable
 {
 	private readonly Action<ConnectionTrackingMonitoringSystem> _updateCallback;
 	private readonly Dictionary<Guid, OnlineConnection> _connections = [];
@@ -26,42 +26,25 @@ public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDis
 	public IReadOnlyDictionary<Guid, OnlineConnection> Connections => _connections;
 
 
-	public void NewContext(MonitoringContext context)
+	public void NotifyNewProcedure(TrackableProcedure procedure)
 	{
 
 	}
 
-	public void CloseContext(MonitoringContext context)
+	public void NotifyNewCommit(TrackableProcedure procedure, SystemReport newReport)
 	{
-		if (_connections.TryGetValue(context.Id, out var connection))
-		{
-			connection.CurrentStatus = OnlineConnection.Status.Closed;
-			if (_deleteTimerScheduled == false)
-			{
-				_deleteTimer.Change(TimeSpan.FromMilliseconds(500), Timeout.InfiniteTimeSpan);
-				_deleteTimerScheduled = true;
-			}
-		}
-
-		Update();
-	}
-
-	public void NewReport(SystemReport report)
-	{
-
-	}
-
-	public void FinishReport(SystemReport report)
-	{
-		if (report.MonitoringContext.Type != "Connection")
+		if (newReport.Procedure.Type != "Connection")
 			return;
 
-		switch (report)
+		switch (newReport)
 		{
 			case HTTPInboundDriver.Report httpReport:
 				{
+					if (httpReport.RemoteEndPoint.IsSet == false || httpReport.DestinationEndPoint.IsSet == false)
+						return;
+
 					var newConnection = new OnlineConnection(
-						report.MonitoringContext,
+						newReport.Procedure,
 						httpReport.RemoteEndPoint.Value,
 						new WebEndPoint(httpReport.DestinationEndPoint.Value, TransportType.StreamBased),
 						"HTTP"
@@ -74,8 +57,11 @@ public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDis
 
 			case SOCKS5InboundDriver.Report socksReport:
 				{
+					if (socksReport.RemoteEndPoint.IsSet == false || socksReport.DestinationEndPoint.IsSet == false)
+						return;
+
 					var newConnection = new OnlineConnection(
-						report.MonitoringContext,
+						newReport.Procedure,
 						socksReport.RemoteEndPoint.Value,
 						socksReport.DestinationEndPoint.Value,
 						"SOCKS5"
@@ -88,7 +74,7 @@ public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDis
 
 			case SmartRouter.Report smartRouterReport:
 				{
-					if (_connections.TryGetValue(smartRouterReport.MonitoringContext.Id, out var connection))
+					if (_connections.TryGetValue(smartRouterReport.Procedure.Id, out var connection) && smartRouterReport.ResultIAP.IsSet && smartRouterReport.ResultChannelName.IsSet)
 					{
 						connection.RoutingResult = (smartRouterReport.ResultIAP.Value, smartRouterReport.ResultChannelName.Value);
 						Update();
@@ -98,9 +84,19 @@ public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDis
 		}
 	}
 
-	public void SetReportProperty<TProperty>(SystemReport report, string propertyName, ReportProperty<TProperty> oldValue, TProperty newValue)
+	public void NotifyProcedureFinished(TrackableProcedure procedure)
 	{
+		if (_connections.TryGetValue(procedure.Id, out var connection))
+		{
+			connection.CurrentStatus = OnlineConnection.Status.Closed;
+			if (_deleteTimerScheduled == false)
+			{
+				_deleteTimer.Change(TimeSpan.FromMilliseconds(500), Timeout.InfiniteTimeSpan);
+				_deleteTimerScheduled = true;
+			}
+		}
 
+		Update();
 	}
 
 	private void Update()
@@ -123,7 +119,7 @@ public sealed class ConnectionTrackingMonitoringSystem : IMonitoringSystem, IDis
 				else shouldReschedule = true;
 			}
 
-		bool shouldUpdate = _toDelete.Any();
+		bool shouldUpdate = _toDelete.Count != 0;
 		foreach (var item in _toDelete)
 			_connections.Remove(item);
 		_toDelete.Clear();

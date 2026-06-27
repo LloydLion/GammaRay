@@ -5,9 +5,9 @@ using System.Net;
 
 namespace GammaRay.Client.TUI;
 
-public sealed class OnlineConnection(MonitoringContext context, IPEndPoint endPoint, WebEndPoint destination, string inboundDriver)
+public sealed class OnlineConnection(TrackableProcedure procedure, IPEndPoint endPoint, WebEndPoint destination, string inboundDriver)
 {
-	public MonitoringContext Context { get; } = context;
+	public TrackableProcedure Procedure { get; } = procedure;
 
 	public IPEndPoint EndPoint { get; } = endPoint;
 
@@ -19,7 +19,7 @@ public sealed class OnlineConnection(MonitoringContext context, IPEndPoint endPo
 
 	public Status CurrentStatus { get; set; } = Status.Open;
 
-	public Guid Id => Context.Id;
+	public Guid Id => Procedure.Id;
 
 	public int TTL { get; set; } = 4;
 

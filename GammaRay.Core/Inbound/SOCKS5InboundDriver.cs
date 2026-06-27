@@ -13,11 +13,11 @@ namespace GammaRay.Core.Inbound;
 [RecommendedDriverName("socks")]
 public sealed class SOCKS5InboundDriver(
 	TimeProvider _time,
-	IMonitoringSystem _monitoringSystem
+	MonitoringSystem _monitoringSystem
 ) : IInboundDriver
 {
 	private readonly TimeProvider _time = _time;
-	private readonly IMonitoringSystem _monitoringSystem = _monitoringSystem;
+	private readonly MonitoringSystem _monitoringSystem = _monitoringSystem;
 
 
 	public IInbound CreateInbound(IPEndPoint localEndPoint)
@@ -82,13 +82,15 @@ public sealed class SOCKS5InboundDriver(
 
 			var messageBuffer = _pool.Rent(256);
 
+			var now = _owner._time.GetUtcNow().UtcDateTime;
+			using var procedure = TrackableProcedure.New("Connection", now, _owner._monitoringSystem);
+
 			try
 			{
 				RequestContext requestContext;
 
-				var now = _owner._time.GetUtcNow().UtcDateTime;
-				using var monitoringContext = new MonitoringContext("Connection", now, _owner._monitoringSystem);
-				using (var report = monitoringContext.NewReport<Report>())
+				
+				using (var report = new Report(procedure))
 				{
 					report.RemoteEndPoint = (IPEndPoint)client.RemoteEndPoint!;
 
@@ -123,12 +125,15 @@ public sealed class SOCKS5InboundDriver(
 						return;
 
 					var incomingFlow = new SocketBasedStreamDataFlow(client);
-					requestContext = new RequestContext(endPoint, incomingFlow, now, monitoringContext);
+					requestContext = new RequestContext(endPoint, incomingFlow, now, procedure);
 				}
 
 				await _requestCallback!.Invoke(this, requestContext);
 			}
-			catch (Exception) { }
+			catch (Exception ex)
+			{
+				procedure.SetFatalException(ex);
+			}
 			finally
 			{
 				_pool.Return(messageBuffer);
@@ -153,12 +158,13 @@ public sealed class SOCKS5InboundDriver(
 		}
 	}
 
-	public class Report() : SystemReport(nameof(SOCKS5InboundDriver))
+	[SystemReportMetadata(nameof(IInboundDriver), nameof(SOCKS5InboundDriver), "HandleRequest")]
+	public class Report(TrackableProcedure? autoBind = null) : SystemReport(autoBind)
 	{
-		public ReportProperty<IPEndPoint> RemoteEndPoint { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<IPEndPoint> RemoteEndPoint { get; set; }
 
-		public ReportProperty<SocksAddressType> AddressType { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<SocksAddressType> AddressType { get; set; }
 
-		public ReportProperty<WebEndPoint> DestinationEndPoint { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<WebEndPoint> DestinationEndPoint { get; set; }
 	}
 }

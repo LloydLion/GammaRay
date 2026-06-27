@@ -4,5 +4,5 @@ namespace GammaRay.Core.InternetAccess.Channels.Testing;
 
 public interface IIAPChannelSimpleTester
 {
-	public ValueTask<bool> PerformTestAsync(IAPChannel channel, CancellationToken cancellation, MonitoringContext monitoring);
+	public ValueTask<bool> PerformTestAsync(IAPChannel channel, CancellationToken cancellation, TrackableProcedure monitoring);
 }

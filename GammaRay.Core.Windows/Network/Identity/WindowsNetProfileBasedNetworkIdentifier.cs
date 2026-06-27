@@ -10,12 +10,12 @@ namespace GammaRay.Core.Windows.Network.Identity;
 
 
 public partial class WindowsNetProfileBasedNetworkIdentifier(
-	IMonitoringSystem monitoringSystem,
+	MonitoringSystem monitoringSystem,
 	TimeProvider timeProvider,
 	PowerShellHost _powerShell
 ) : NetworkIdentifierBase(monitoringSystem, timeProvider)
 {
-	protected override NetworkIdentity FetchCurrentNetworkIdentity(MonitoringContext monitoringContext)
+	protected override NetworkIdentity FetchCurrentNetworkIdentity(TrackableProcedure trackableProcedure)
 	{
 		var internetInterfaceIP = TraceRouteToInternet();
 		var internetInterface = GetInterfaceByIP(internetInterfaceIP);

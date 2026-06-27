@@ -1,5 +1,6 @@
 using GammaRay.Core.Monitoring;
 using Nito.AsyncEx;
+using System.Diagnostics;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -15,7 +16,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 
 	private readonly ITimer _timer;
 	private readonly HashSet<Subscription> _subscribers = [];
-	private readonly IMonitoringSystem _monitoringSystem;
+	private readonly MonitoringSystem _monitoringSystem;
 	private readonly TimeProvider _time;
 	private readonly Ping _pingAgent = new();
 	private SynchronizationContext? _synchronizationContext;
@@ -24,7 +25,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 	private int _isRefreshing = 0;
 
 
-	protected NetworkIdentifierBase(IMonitoringSystem monitoringSystem, TimeProvider time)
+	protected NetworkIdentifierBase(MonitoringSystem monitoringSystem, TimeProvider time)
 	{
 		_monitoringSystem = monitoringSystem;
 		_time = time;
@@ -66,15 +67,12 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 
 		async Task callback()
 		{
-			MonitoringContext? context = null;
-			Report? report = null;
+			TrackableProcedure procedure = TrackableProcedure.New("NetworkIdentityRefresh", _time, _monitoringSystem);
 			try
 			{
-				context = new MonitoringContext("NetworkIdentityRefresh", _time, _monitoringSystem);
-				report = context.NewReport<Report>();
-				report.IdentifierName = GetType().Name;
+				using var report = new Report(procedure) { IdentifierName = GetType().Name };
 
-				var newIdentity = FetchCurrentNetworkIdentity(context);
+				var newIdentity = FetchCurrentNetworkIdentity(procedure);
 
 				var isInternetReachable = await PingInternet();
 
@@ -88,12 +86,12 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 			}
 			catch (Exception ex)
 			{
-				report?.Exception = ex;
+				Debugger.BreakForUserUnhandledException(ex);
+				procedure.SetFatalException(ex);
 			}
 			finally
 			{
-				report?.Finish();
-				context?.Close();
+				procedure.Finish();
 				_isRefreshing = 0;
 			}
 
@@ -107,7 +105,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 		return true;
 	}
 
-	protected abstract NetworkIdentity FetchCurrentNetworkIdentity(MonitoringContext monitoringContext);
+	protected abstract NetworkIdentity FetchCurrentNetworkIdentity(TrackableProcedure procedure);
 
 	protected static IPAddress TraceRouteToInternet()
 	{
@@ -150,13 +148,14 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 	private static InvalidOperationException ThrowNotInitialized() => new($"Not initialized. Call {nameof(Initialize)}() method first");
 
 
-	public class Report() : SystemReport(nameof(NetworkIdentifierBase))
+	[SystemReportMetadata(nameof(INetworkIdentifier), nameof(NetworkIdentifierBase), "RefreshIdentity")]
+	public class Report(TrackableProcedure? autoBindProcedure = null) : SystemReport(autoBindProcedure)
 	{
-		public ReportProperty<NetworkIdentity?> NewNetworkIdentity { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<NetworkIdentity?> NewNetworkIdentity { get; set; }
 
-		public ReportProperty<Exception> Exception { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<Exception> Exception { get; set; }
 
-		public ReportProperty<string> IdentifierName { get; set => SetProperty(ref field, value.Value); }
+		public ReportProperty<string> IdentifierName { get; set; }
 	}
 
 	private class Subscription(

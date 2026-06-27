@@ -7,12 +7,12 @@ using Channel = System.Threading.Channels.Channel;
 namespace GammaRay.Core.API;
 
 public sealed class GammaRayApiService(
-	APIBasedMonitoringSystem monitoringSystem,
+	APIBasedMonitoringProvider monitoringSystem,
 	ApplicationControl applicationControl,
 	SettingsFileHolder settingsFile
 ) : GammaRayService.GammaRayServiceBase
 {
-	private readonly APIBasedMonitoringSystem _monitoringSystem = monitoringSystem;
+	private readonly APIBasedMonitoringProvider _monitoringSystem = monitoringSystem;
 	private readonly ApplicationControl _applicationControl = applicationControl;
 	private readonly SettingsFileHolder _settingsFile = settingsFile;
 

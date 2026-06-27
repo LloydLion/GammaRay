@@ -1,94 +1,94 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
 namespace GammaRay.Core.Monitoring;
 
 public abstract class SystemReport : IDisposable
 {
-	private static readonly Dictionary<Type, ReportMetadata> GeneratedMetadata = [];
+	private static readonly Dictionary<Type, ReportClassData> GeneratedClassData = [];
 
 
-	private readonly ReportMetadata _myMetadata;
-	private MonitoringContext? _monitoringContext;
-	private bool _onChangedNotificationEnabled = true;
+	private readonly ReportClassData _myClass;
+	private readonly TrackableProcedure? _autoBindProcedure;
+	private TrackableProcedure? _boundProcedure;
+	private SystemReportBindingParameters _bindingParameters;
 
 
-	protected SystemReport(string component)
+	protected SystemReport(TrackableProcedure? autoBindProcedure = null)
 	{
-		Component = component;
-
-		var myType = GetType();
-		if (GeneratedMetadata.TryGetValue(myType, out var myMetadata) == false)
-		{
-			myMetadata = GenerateReportMetadata(myType);
-			GeneratedMetadata.Add(myType, myMetadata);
-		}
-		_myMetadata = myMetadata;
+		_myClass = GetReportClassData(GetType());
+		_autoBindProcedure = autoBindProcedure;
 	}
 
 
-	public MonitoringContext MonitoringContext => _monitoringContext ?? throw new InvalidOperationException(
-		"No monitoring context. Do not create report directly, use MonitoringContext.NewReport<TReport>() method"
-	);
+	public TrackableProcedure Procedure => _boundProcedure ?? throw new InvalidOperationException("Report is not bound to a procedure");
 
-	public string Component { get; }
+	public SystemReportBindingParameters BindingParameters => IsBound ? _bindingParameters : throw new InvalidOperationException("Report is not bound to a procedure");
 
-	public bool Finished { get; private set; } = false;
+	[MemberNotNullWhen(true, nameof(_boundProcedure))]
+	public bool IsBound => _boundProcedure is not null;
+
+	public string ClassIdentification => GetType().FullName ?? throw new UnreachableException();
+
+	public SystemReportMetadata Metadata => _myClass.Metadata;
 
 
-	public void Finish()
+	internal void BindProcedure(TrackableProcedure procedure, SystemReportBindingParameters binding)
 	{
-		Finished = true;
-		MonitoringContext.NotifyReportFinished(this);
+		_boundProcedure = procedure;
+		_bindingParameters = binding;
 	}
 
-	void IDisposable.Dispose() => Finish();
-
-	internal void SetContext(MonitoringContext monitoringContext)
-	{
-		_monitoringContext = monitoringContext;
-	}
-
-	protected void SetProperty<T>(ref ReportProperty<T> property, T newValue, [CallerMemberName] string propertyName = "None")
-	{
-		var ctx = MonitoringContext;
-
-		property = newValue;
-
-		if (_onChangedNotificationEnabled)
-			ctx.NotifyReportChanged(this, propertyName, property, newValue);
-	}
-
-	public IReadOnlyDictionary<string, SystemReportPropertyDeclaration> ListProperties() => _myMetadata.PropertyDeclarations;
+	public IReadOnlyDictionary<string, SystemReportPropertyDeclaration> ListProperties() => _myClass.PropertyDeclarations;
 
 	public void ReadProperties<TReader>(TReader reader) where TReader : ISystemReportReader, allows ref struct
 	{
-		if (_myMetadata.GeneratedPropertyReaders.TryGetValue(typeof(TReader), out var propertyReaderDelegate) == false)
+		if (_myClass.GeneratedPropertyReaders.TryGetValue(typeof(TReader), out var propertyReaderDelegate) == false)
 		{
 			propertyReaderDelegate = GenerateReaderDelegate(typeof(TReader));
-			_myMetadata.GeneratedPropertyReaders.Add(typeof(TReader), propertyReaderDelegate);
+			_myClass.GeneratedPropertyReaders.Add(typeof(TReader), propertyReaderDelegate);
 		}
 
 		((ReportReaderDelegate<TReader>)propertyReaderDelegate).Invoke(this, reader);
 	}
 
 	public ReportProperty<TProperty> ReadProperty<TProperty>(string propertyName) =>
-		((ReportPropertyGetter<TProperty>)_myMetadata.Properties[propertyName].Reader)(this);
+		((ReportPropertyGetter<TProperty>)_myClass.Properties[propertyName].Reader)(this);
 
 	public void WriteProperty<TProperty>(string propertyName, TProperty newValue) =>
-		((ReportPropertySetter<TProperty>)_myMetadata.Properties[propertyName].Writer)(this, ReportProperty.Create(newValue));
+		((ReportPropertySetter<TProperty>)_myClass.Properties[propertyName].Writer)(this, ReportProperty.Create(newValue));
 
-	public void ControlContextNotification(bool enableOnChangedNotification) => _onChangedNotificationEnabled = enableOnChangedNotification;
+	void IDisposable.Dispose()
+	{
+		if (_autoBindProcedure is null)
+			throw new InvalidOperationException("No system to bind, in case of manual bind remove Dispose call");
+		_autoBindProcedure.CommitReport(this);
+		GC.SuppressFinalize(this);
+	}
 
 
-	private static ReportMetadata GenerateReportMetadata(Type reportType)
+	public static Type GetTypeByClassIdentification(string classIdentification) => typeof(SystemReport).Assembly.GetType(classIdentification, throwOnError: true)!;
+
+	public static SystemReport CreateNewReportByType(Type type) => GetReportClassData(type).FactoryMethod();
+
+	public static SystemReport CreateNewReportByClassIdentification(string classIdentification) => CreateNewReportByType(GetTypeByClassIdentification(classIdentification));
+
+	private static ReportClassData GetReportClassData(Type reportType)
+	{
+		if (GeneratedClassData.TryGetValue(reportType, out var reportClassData) == false)
+			GeneratedClassData.Add(reportType, reportClassData = GenerateReportClassData(reportType));
+		return reportClassData;
+	}
+
+	private static ReportClassData GenerateReportClassData(Type reportType)
 	{
 		var properties = reportType.GetProperties(BindingFlags.Instance | BindingFlags.Public).Where(prop =>
 			prop.CanRead && prop.CanWrite && prop.PropertyType.IsGenericType && prop.PropertyType.GetGenericTypeDefinition() == typeof(ReportProperty<>)
 		);
 
-		var result = new List<ReportPropertyMetadata>();
+		var result = new List<ReportPropertyInfo>();
 		foreach (var property in properties)
 		{
 			var name = property.Name;
@@ -105,10 +105,22 @@ public abstract class SystemReport : IDisposable
 			var getterDelegateType = typeof(ReportPropertyGetter<>).MakeGenericType([valueType]);
 			var getterDelegate = Expression.Lambda(getterDelegateType, getExpression, reportParameter).Compile();
 
-			result.Add(new ReportPropertyMetadata(new SystemReportPropertyDeclaration(name, valueType, property), getterDelegate, setterDelegate));
+			result.Add(new ReportPropertyInfo(new SystemReportPropertyDeclaration(name, valueType, property), getterDelegate, setterDelegate));
 		}
 
-		return new ReportMetadata(result.ToArray());
+
+		var constructor = reportType.GetConstructors().OrderBy(s => s.GetParameters().Length).First(s => s.GetParameters().All(p => p.HasDefaultValue));
+		var constructorCallParameters = constructor.GetParameters().Select(p => Expression.Constant(p.DefaultValue, p.ParameterType)).ToArray();
+		var factoryExpression = Expression.New(constructor, constructorCallParameters);
+		var factoryMethod = Expression.Lambda<Func<SystemReport>>(factoryExpression, []).Compile();
+
+
+		var metadata = reportType.GetCustomAttribute<SystemReportMetadataAttribute>(inherit: false)?.Metadata
+			?? throw new NullReferenceException($"{reportType} has no required SystemReportMetadata attribute");
+		Debug.Assert(metadata is not null);
+
+
+		return new ReportClassData(result.ToArray(), factoryMethod, metadata);
 	}
 
 	private Delegate GenerateReaderDelegate(Type readerType)
@@ -122,7 +134,7 @@ public abstract class SystemReport : IDisposable
 
 		var feedMethodGeneric = readerType.GetMethod(nameof(ISystemReportReader.FeedProperty), BindingFlags.Instance | BindingFlags.Public)!;
 
-		foreach (var property in _myMetadata.Properties.Values)
+		foreach (var property in _myClass.Properties.Values)
 		{
 			var propertyExpression = Expression.Property(typedReport, property.Declaration.PropertyInfo);
 			var propertyName = Expression.Constant(property.Declaration.Name);
@@ -146,16 +158,20 @@ public abstract class SystemReport : IDisposable
 	}
 
 
-	private class ReportMetadata(ReportPropertyMetadata[] properties)
+	private class ReportClassData(ReportPropertyInfo[] properties, Func<SystemReport> factoryMethod, SystemReportMetadata metadata)
 	{
+		public Func<SystemReport> FactoryMethod { get; } = factoryMethod;
+
 		public Dictionary<Type, Delegate> GeneratedPropertyReaders { get; } = [];
 
-		public Dictionary<string, ReportPropertyMetadata> Properties { get; } = properties.ToDictionary(s => s.Declaration.Name);
+		public Dictionary<string, ReportPropertyInfo> Properties { get; } = properties.ToDictionary(s => s.Declaration.Name);
 
 		public IReadOnlyDictionary<string, SystemReportPropertyDeclaration> PropertyDeclarations { get; } = properties.Select(s => s.Declaration).ToDictionary(s => s.Name);
+
+		public SystemReportMetadata Metadata { get; } = metadata;
 	}
 
-	private class ReportPropertyMetadata(SystemReportPropertyDeclaration declaration, Delegate reader, Delegate writer)
+	private class ReportPropertyInfo(SystemReportPropertyDeclaration declaration, Delegate reader, Delegate writer)
 	{
 		public SystemReportPropertyDeclaration Declaration { get; } = declaration;
 

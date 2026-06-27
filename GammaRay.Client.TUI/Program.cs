@@ -10,7 +10,6 @@ using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils.FileSystem;
-using Microsoft.Extensions.Options;
 using Nito.AsyncEx;
 
 var cancelWait = new CancellationTokenSource();
@@ -47,7 +46,8 @@ AsyncContext.Run(async () =>
 
 
 		var tuiMonitoring = new ConnectionTrackingMonitoringSystem(redrawUI, TimeProvider.System);
-		var apiMonitoringEventListener = new APIMonitoringEventListener(tuiMonitoring, serializerOptionsSource);
+		var monitoringSystem = new MonitoringSystem([tuiMonitoring]);
+		var apiMonitoringEventListener = new APIMonitoringEventListener(monitoringSystem, serializerOptionsSource);
 
 		apiClient.AddEventListener(apiMonitoringEventListener);
 

@@ -1,51 +1,57 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace GammaRay.Core.Monitoring;
 
-public sealed class ConsoleMonitoringSystem : IMonitoringSystem
+public sealed class ConsoleMonitoringProvider : IMonitoringProvider
 {
-	public void NewContext(MonitoringContext context)
+	public void NotifyNewProcedure(TrackableProcedure procedure) { }
+
+	public void NotifyProcedureFinished(TrackableProcedure procedure)
 	{
+		PrintColoredRaw("[", null);
+		PrintColoredString(procedure.Type);
+		PrintColoredRaw("][", null);
 
-	}
+		var procId = procedure.Id;
+		var procIdBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref procId, 1));
+		var printableId = BitConverter.ToInt32(procIdBytes);
 
-	public void CloseContext(MonitoringContext context)
-	{
+		PrintColoredRaw(printableId.ToString("X4"), ObjectColorizer.ColorForByte(procIdBytes[0]));
+		PrintColoredRaw("] Procedure finished", null);
 
-	}
-
-	public void FinishReport(SystemReport report)
-	{
-		PrintReportPrefix(report);
+		if (procedure.IsFailed)
+		{
+			Console.WriteLine();
+			var exception = procedure.FatalException;
+			PrintColoredRaw(exception.ToString(), ConsoleColor.Red);
+		}
 		Console.WriteLine();
-		report.ReadProperties(new ConsoleReportReader());
 	}
 
-	public void NewReport(SystemReport report)
+	public void NotifyNewCommit(TrackableProcedure procedure, SystemReport newReport)
 	{
-		PrintReportPrefix(report);
-		Console.WriteLine(" New report");
-	}
-
-	public void SetReportProperty<TProperty>(SystemReport report, string propertyName, ReportProperty<TProperty> oldValue, TProperty newValue)
-	{
-
+		PrintReportPrefix(newReport);
+		Console.WriteLine();
+		newReport.ReadProperties(new ConsoleReportReader());
 	}
 
 	private static void PrintReportPrefix(SystemReport report)
 	{
 		PrintColoredRaw("[", null);
-		PrintColoredString(report.MonitoringContext.Type);
+		PrintColoredString(report.Procedure.Type);
 		PrintColoredRaw("][", null);
 
-		var contextId = report.MonitoringContext.Id;
-		var contextIdBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref contextId, 1));
-		var printableId = BitConverter.ToInt32(contextIdBytes);
+		var procId = report.Procedure.Id;
+		var procIdBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref procId, 1));
+		var printableId = BitConverter.ToInt32(procIdBytes);
 
-		PrintColoredRaw(printableId.ToString("X4"), ObjectColorizer.ColorForByte(contextIdBytes[0]));
+		PrintColoredRaw(printableId.ToString("X4"), ObjectColorizer.ColorForByte(procIdBytes[0]));
 		PrintColoredRaw("][", null);
-		PrintColoredString(report.Component);
+		PrintColoredString(report.Metadata.Role);
+		PrintColoredRaw("|", null);
+		PrintColoredString(report.Metadata.Component);
+		PrintColoredRaw("|", null);
+		PrintColoredString(report.Metadata.Task);
 		PrintColoredRaw("]", null);
 	}
 
@@ -58,7 +64,6 @@ public sealed class ConsoleMonitoringSystem : IMonitoringSystem
 	}
 
 	private static void PrintColoredString(string text) => PrintColoredRaw(text, ObjectColorizer.ColorForString(text));
-
 
 	private readonly struct ConsoleReportReader() : ISystemReportReader
 	{

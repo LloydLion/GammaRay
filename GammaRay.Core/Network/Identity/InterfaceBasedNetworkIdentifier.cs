@@ -4,9 +4,9 @@ using System.Net.Sockets;
 
 namespace GammaRay.Core.Network.Identity;
 
-public class InterfaceBasedNetworkIdentifier(IMonitoringSystem monitoringSystem, TimeProvider time) : NetworkIdentifierBase(monitoringSystem, time)
+public class InterfaceBasedNetworkIdentifier(MonitoringSystem monitoringSystem, TimeProvider time) : NetworkIdentifierBase(monitoringSystem, time)
 {
-	protected override NetworkIdentity FetchCurrentNetworkIdentity(MonitoringContext monitoringContext)
+	protected override NetworkIdentity FetchCurrentNetworkIdentity(TrackableProcedure trackableProcedure)
 	{
 		var internetInterfaceIP = TraceRouteToInternet();
 		var internetInterface = GetInterfaceByIP(internetInterfaceIP);

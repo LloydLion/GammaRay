@@ -10,5 +10,5 @@ public readonly record struct ProbingArgs(
 	IReadOnlyDictionary<string, string> Parameters,
 	CommonProbeDriverOptions Options,
 	TimeProvider TimeProvider,
-	MonitoringContext MonitoringContext
+	TrackableProcedure MonitoringContext
 );
