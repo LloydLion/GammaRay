@@ -1,4 +1,4 @@
-using GammaRay.Core.API.Proto;
+using GammaRay.Core.API.Services.Proto;
 
 namespace GammaRay.Core.API.Client;
 

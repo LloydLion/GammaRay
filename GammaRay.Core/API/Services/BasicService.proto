@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package GammaRay.Core.API;
+
+import "API/Services/common.proto";
+
+option csharp_namespace = "GammaRay.Core.API.Services.Proto";
+
+service BasicService {
+	rpc GetAPIVersion(Empty) returns (VersionResponse);
+}
+
+message VersionResponse {
+	int32 version = 1;
+}

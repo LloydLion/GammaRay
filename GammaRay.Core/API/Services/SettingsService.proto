@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package GammaRay.Core.API;
+
+import "API/Services/common.proto";
+
+option csharp_namespace = "GammaRay.Core.API.Services.Proto";
+
+service SettingsService {
+	rpc GetCurrentSettingsFile(Empty) returns (SettingsFileResponse);
+	rpc UploadNewSettingsFile(SettingsFileRequest) returns (Empty);
+}
+
+message SettingsFileResponse {
+	string content = 1;
+}
+
+message SettingsFileRequest {
+	string content = 1;
+}

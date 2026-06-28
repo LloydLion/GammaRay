@@ -1,4 +1,4 @@
-using GammaRay.Core.API.Proto;
+using GammaRay.Core.API.Services.Proto;
 using Grpc.Core;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics;
@@ -18,11 +18,12 @@ public class GammaRayAPIClient() : IGammaRayAPIClient
 	public async ValueTask ConnectAsync(string hostname, int port)
 	{
 		var channel = new Channel(hostname, port, ChannelCredentials.Insecure);
-		var client = new GammaRayService.GammaRayServiceClient(channel);
-		
+
+		var aggregateClient = new AggregateServiceClient(channel);
+
 		var cts = new CancellationTokenSource();
 
-		_connection = new ConnectionContext(channel, client, cts);
+		_connection = new ConnectionContext(channel, aggregateClient, cts);
 		_connection.MonitoringEventsReceiveLoopTask = ReceiveEventsLoop(_connection);
 	}
 
@@ -30,37 +31,55 @@ public class GammaRayAPIClient() : IGammaRayAPIClient
 
 	public async ValueTask<int> RequestAPIVVersionAsync()
 	{
-		var response = await RequireConnection().ServiceClient.GetAPIVersionAsync(new Empty());
+		var response = await RequireConnection().ServiceClient.Basic.GetAPIVersionAsync(new Empty());
 		return response.Version;
 	}
 
 	public async ValueTask<string> RequestReadSettingsAsync()
 	{
-		var response = await RequireConnection().ServiceClient.GetCurrentSettingsFileAsync(new Empty());
+		var response = await RequireConnection().ServiceClient.Settings.GetCurrentSettingsFileAsync(new Empty());
 		return response.Content;
 	}
 
 	public async ValueTask RequestReloadApplicationAsync()
 	{
-		await RequireConnection().ServiceClient.ReloadApplicationAsync(new Empty());
+		await RequireConnection().ServiceClient.Control.ReloadApplicationAsync(new Empty());
 		await DisconnectAsync();
 	}
 
 	public async ValueTask RequestWriteSettingsAsync(string settingsContent)
 	{
-		await RequireConnection().ServiceClient.UploadNewSettingsFileAsync(new SettingsFileRequest { Content = settingsContent });
+		await RequireConnection().ServiceClient.Settings.UploadNewSettingsFileAsync(new SettingsFileRequest { Content = settingsContent });
 	}
 
 	public void AddEventListener(IAPIEventListener listener) => _eventListeners.Add(listener);
 
 	public void RemoveEventListener(IAPIEventListener listener) => _eventListeners.Remove(listener);
 
+	public async ValueTask<IReadOnlyCollection<FullServiceInfoReponse>> QueryServices(ServiceFilter serviceFilter)
+	{
+		var stream = RequireConnection().ServiceClient.Services.QueryFullServiceInfo(serviceFilter).ResponseStream;
+		var result = new List<FullServiceInfoReponse>();
+		while (await stream.MoveNext())
+			result.Add(stream.Current);
+		return result;
+	}
+
+	public async ValueTask<IReadOnlyCollection<IAPChannelStatusResponse>> QueryChannelStatuses(IAPChannelFilter channelFilter)
+	{
+		var stream = RequireConnection().ServiceClient.Channels.QueryIAPChannelStatus(channelFilter).ResponseStream;
+		var result = new List<IAPChannelStatusResponse>();
+		while (await stream.MoveNext())
+			result.Add(stream.Current);
+		return result;
+	}
+
 	private async Task ReceiveEventsLoop(ConnectionContext connection)
 	{
 		await Task.Yield();
 		try
 		{
-			using var call = connection.ServiceClient.SubscribeEvents(new Empty(), cancellationToken: connection.Cancelation.Token);
+			using var call = connection.ServiceClient.Monitoring.SubscribeEvents(new Empty(), cancellationToken: connection.Cancelation.Token);
 			while (await call.ResponseStream.MoveNext(connection.Cancelation.Token))
 			{
 				foreach (var listener in _eventListeners)
@@ -102,11 +121,11 @@ public class GammaRayAPIClient() : IGammaRayAPIClient
 	}
 
 
-	private class ConnectionContext(Channel channel, GammaRayService.GammaRayServiceClient serviceClient, CancellationTokenSource cts)
+	private class ConnectionContext(Channel channel, AggregateServiceClient serviceClient, CancellationTokenSource cts)
 	{
 		public Channel Channel { get; } = channel;
 
-		public GammaRayService.GammaRayServiceClient ServiceClient { get; } = serviceClient;
+		public AggregateServiceClient ServiceClient { get; } = serviceClient;
 
 		public CancellationTokenSource Cancelation { get; } = cts;
 

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package GammaRay.Core.API;
+
+option csharp_namespace = "GammaRay.Core.API.Services.Proto";
+
+message Empty { }
+
+// Standard GUID form
+// aaAAaaAA-bbBB-ccCC-ddeeffggiijjkk
+message Guid {
+	fixed64 ac = 1;
+	fixed64 dk = 2;
+}

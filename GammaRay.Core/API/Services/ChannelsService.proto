@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package GammaRay.Core.API;
+
+import "google/protobuf/duration.proto";
+import "API/Services/common.proto";
+
+option csharp_namespace = "GammaRay.Core.API.Services.Proto";
+
+service ChannelsService {
+	rpc QueryIAPChannelStatus(IAPChannelFilter) returns (stream IAPChannelStatusResponse); 
+}
+
+message IAPChannelFilter {
+	string IAP = 1;
+	string Channel = 2;
+	string Network = 3;
+}
+
+message IAPChannelStatusResponse {
+	string IAP = 1;
+	string Channel = 2;
+	string Network = 3;
+
+	google.protobuf.Duration characteristicAccessTime = 4;
+	google.protobuf.Duration averageAccessTime = 5;
+	double accessChance = 6;
+	bool isAvailable = 7;
+}

@@ -7,5 +7,7 @@ public interface IServiceRepository
 {
 	public Decayable<Service>? TryGetService(WebEndPoint webEndPoint);
 
+	public IReadOnlyCollection<Decayable<Service>> ListServices();
+
 	public void RegisterService(Service service);
 }

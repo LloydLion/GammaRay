@@ -30,6 +30,11 @@ public sealed class DbServiceRepository(
 		return null;
 	}
 
+	public IReadOnlyCollection<Decayable<Service>> ListServices()
+	{
+		return CurrentState.Data.Values;
+	}
+
 	protected override void ApplyMutation(State state, Mutation mutation)
 	{
 		state.Data[mutation.ServiceDecayable.Value.EndPoint] = mutation.ServiceDecayable;

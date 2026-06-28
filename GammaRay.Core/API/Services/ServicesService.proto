@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package GammaRay.Core.API;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "API/Services/common.proto";
+
+option csharp_namespace = "GammaRay.Core.API.Services.Proto";
+
+service ServicesService {
+	rpc QueryFullServiceInfo(ServiceFilter) returns (stream FullServiceInfoReponse);
+}
+
+enum TransportType {
+	None = 0;
+	DatagramBased = 1;
+	StreamBased = 2;
+}
+
+message ServiceFilter {
+	string hostName = 1;
+	int32 port = 2;
+	TransportType protocol = 3;
+}
+
+message FullServiceInfoReponse {
+	string hostName = 1;
+	int32 port = 2;
+	TransportType protocol = 3;
+		
+	string capabilityClass = 4;
+	map<string, string> capabilityProperties = 5;
+
+	map<string, ServiceIAPStatus> statusTableData = 6;
+
+	google.protobuf.Timestamp serviceDecayTime = 7;
+	google.protobuf.Timestamp statusTableDecayTime = 8;
+}
+
+message ServiceIAPStatus {
+	enum StatusType {
+		Available = 0;
+		ServerSideBan = 1;
+		Blocked = 2;
+	}
+
+	StatusType type = 1;
+	google.protobuf.Duration averageProbeTime = 2;
+}

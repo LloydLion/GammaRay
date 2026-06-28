@@ -1,12 +1,14 @@
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Monitoring.Converters;
 using System.Text.Json;
-using GammaRay.Core.API.Proto;
 using Google.Protobuf;
 using System.Runtime.InteropServices;
 using Google.Protobuf.WellKnownTypes;
+using GammaRay.Core.API.Services.Proto;
+using Guid = System.Guid;
+using GGuid = GammaRay.Core.API.Services.Proto.Guid;
 
-namespace GammaRay.Core.API;
+namespace GammaRay.Core.API.Services;
 
 public sealed class APIBasedMonitoringProvider(
 	MonitoringSerializerOptionsSource serializerOptionsSource
@@ -29,7 +31,7 @@ public sealed class APIBasedMonitoringProvider(
 			NewProcedure = new NewProcedureEvent()
 			{
 				CreationTime = Timestamp.FromDateTime(procedure.CreationTime),
-				ProcedureId = CreateByteString(procedure.Id),
+				ProcedureId = CreateGGuid(procedure.Id),
 				Type = procedure.Type
 			}
 		});
@@ -46,7 +48,7 @@ public sealed class APIBasedMonitoringProvider(
 		{
 			FinishProcedure = new FinishProcedureEvent()
 			{
-				ProcedureId = CreateByteString(procedure.Id),
+				ProcedureId = CreateGGuid(procedure.Id),
 				ExceptionMessage = procedure.FatalException is not null ? procedure.FatalException.ToString() : "",
 				IsSuccessful = procedure.IsSuccessful
 			}
@@ -71,9 +73,9 @@ public sealed class APIBasedMonitoringProvider(
 			{
 				NewProcedure = new NewProcedureEvent
 				{
-					ProcedureId = CreateByteString(procedure.Id),
+					ProcedureId = CreateGGuid(procedure.Id),
 					Type = procedure.Type,
-					CreationTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(procedure.CreationTime),
+					CreationTime = Timestamp.FromDateTime(procedure.CreationTime),
 				}
 			};
 
@@ -91,7 +93,7 @@ public sealed class APIBasedMonitoringProvider(
 	{
 		var evt = new CommitReportEvent
 		{
-			ProcedureId = CreateByteString(report.Procedure.Id),
+			ProcedureId = CreateGGuid(report.Procedure.Id),
 			ClassIdentification = report.ClassIdentification
 		};
 
@@ -105,9 +107,13 @@ public sealed class APIBasedMonitoringProvider(
 			listener(monitoringEvent);
 	}
 
-	private static ByteString CreateByteString(Guid id)
+	private static GGuid CreateGGuid(Guid guid)
 	{
-		return ByteString.CopyFrom(MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref id, 1)));
+		var gGuid = new GGuid();
+		var span = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref guid, 1));
+		gGuid.Ac = BitConverter.ToUInt64(span[..8]);
+		gGuid.Dk = BitConverter.ToUInt64(span[8..]);
+		return gGuid;
 	}
 
 	public delegate void Listener(MonitoringEvent monitoringEvent);

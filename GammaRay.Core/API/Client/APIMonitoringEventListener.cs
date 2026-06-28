@@ -1,10 +1,11 @@
-using GammaRay.Core.API.Proto;
+using GammaRay.Core.API.Services.Proto;
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Monitoring.Converters;
-using Google.Protobuf;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Guid = System.Guid;
+using GGuid = GammaRay.Core.API.Services.Proto.Guid;
 
 namespace GammaRay.Core.API.Client;
 
@@ -23,16 +24,16 @@ public sealed class APIMonitoringEventListener(MonitoringSystem _targetSystem, M
 			case MonitoringEvent.EventOneofCase.NewProcedure:
 				{
 					var data = eventData.NewProcedure;
-					var id = GuidFromByteString(data.ProcedureId);
+					var id = GuidFromGGuid(data.ProcedureId);
 
-					var context = TrackableProcedure.New(data.Type, data.CreationTime.ToDateTime(), _targetSystem, id);
+					TrackableProcedure.New(data.Type, data.CreationTime.ToDateTime(), _targetSystem, id);
 
 					return true;
 				}
 			case MonitoringEvent.EventOneofCase.FinishProcedure:
 				{
 					var data = eventData.FinishProcedure;
-					var id = GuidFromByteString(data.ProcedureId);
+					var id = GuidFromGGuid(data.ProcedureId);
 
 					var procedure = _targetSystem.Context.Procedures[id];
 
@@ -45,7 +46,7 @@ public sealed class APIMonitoringEventListener(MonitoringSystem _targetSystem, M
 			case MonitoringEvent.EventOneofCase.CommitReport:
 				{
 					var data = eventData.CommitReport;
-					var id = GuidFromByteString(data.ProcedureId);
+					var id = GuidFromGGuid(data.ProcedureId);
 
 					var procedure = _targetSystem.Context.Procedures[id];
 
@@ -67,11 +68,12 @@ public sealed class APIMonitoringEventListener(MonitoringSystem _targetSystem, M
 		return false;
 	}
 
-	private static Guid GuidFromByteString(ByteString bytes)
+	private static Guid GuidFromGGuid(GGuid gGuid)
 	{
 		var id = new Guid();
 		var span = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref id, 1));
-		bytes.Span.CopyTo(span);
+		BitConverter.TryWriteBytes(span[..8], gGuid.Ac);
+		BitConverter.TryWriteBytes(span[8..], gGuid.Dk);
 		return id;
 	}
 

@@ -1,3 +1,5 @@
+using GammaRay.Core.API.Services.Proto;
+
 namespace GammaRay.Core.API.Client;
 
 public interface IGammaRayAPIClient
@@ -17,6 +19,10 @@ public interface IGammaRayAPIClient
 	public ValueTask<string> RequestReadSettingsAsync();
 
 	public ValueTask RequestWriteSettingsAsync(string settingsContent);
+
+	public ValueTask<IReadOnlyCollection<FullServiceInfoReponse>> QueryServices(ServiceFilter serviceFilter);
+
+	public ValueTask<IReadOnlyCollection<IAPChannelStatusResponse>> QueryChannelStatuses(IAPChannelFilter channelFilter);
 	
 
 	public void AddEventListener(IAPIEventListener listener);

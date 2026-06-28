@@ -1,11 +1,19 @@
+using GammaRay.Core.API.Services;
+using GammaRay.Core.API.Services.Proto;
 using Grpc.Core;
 
 namespace GammaRay.Core.API;
 
-public sealed class APIServer(APIConfigurationProvider configurationProvider, GammaRayApiService apiService)
+public sealed class APIServer(
+	APIConfigurationProvider _configurationProvider,
+	APIBasicService _service1,
+	APIChannelsService _service2,
+	APIControlService _service3,
+	APIMonitoringService _service4,
+	APIServicesService _service5,
+	APISettingsService _service6
+)
 {
-	private readonly APIConfigurationProvider _configurationProvider = configurationProvider;
-	private readonly GammaRayApiService _apiService = apiService;
 	private Server? _server;
 
 
@@ -16,7 +24,15 @@ public sealed class APIServer(APIConfigurationProvider configurationProvider, Ga
 
 		_server = new Server()
 		{
-			Services = { Proto.GammaRayService.BindService(_apiService) }
+			Services =
+			{
+				BasicService.BindService(_service1),
+				ChannelsService.BindService(_service2),
+				ControlService.BindService(_service3),
+				MonitoringService.BindService(_service4),
+				ServicesService.BindService(_service5),
+				SettingsService.BindService(_service6)
+			}
 		};
 
 		foreach (var endPoint in endPoints)

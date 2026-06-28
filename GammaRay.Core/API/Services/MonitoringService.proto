@@ -3,29 +3,12 @@ syntax = "proto3";
 package GammaRay.Core.API;
 
 import "google/protobuf/timestamp.proto";
+import "API/Services/common.proto";
 
-option csharp_namespace = "GammaRay.Core.API.Proto";
+option csharp_namespace = "GammaRay.Core.API.Services.Proto";
 
-service GammaRayService {
-	rpc GetAPIVersion(Empty) returns (VersionResponse);
-	rpc GetCurrentSettingsFile(Empty) returns (SettingsFileResponse);
-	rpc UploadNewSettingsFile(SettingsFileRequest) returns (Empty);
-	rpc ReloadApplication(Empty) returns (Empty);
+service MonitoringService {
 	rpc SubscribeEvents(Empty) returns (stream MonitoringEvent);
-}
-
-message Empty { }
-
-message VersionResponse {
-	int32 version = 1;
-}
-
-message SettingsFileResponse {
-	string content = 1;
-}
-
-message SettingsFileRequest {
-	string content = 1;
 }
 
 message MonitoringEvent {
@@ -44,19 +27,19 @@ message MonitoringEvent {
 }
 
 message NewProcedureEvent {
-	bytes procedureId = 1;
+	Guid procedureId = 1;
 	string type = 2;
 	google.protobuf.Timestamp creationTime = 3;
 }
 
 message CommitReportEvent {
-	bytes procedureId = 1;
+	Guid procedureId = 1;
 	string classIdentification = 2;
 	map<string, string> jsonReport = 3;
 }
 
 message FinishProcedureEvent {
-	bytes procedureId = 1;
+	Guid procedureId = 1;
 	bool isSuccessful = 2;
 	string exceptionMessage = 3;
 }

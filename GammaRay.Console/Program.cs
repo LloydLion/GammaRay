@@ -1,5 +1,6 @@
 using GammaRay.Core;
 using GammaRay.Core.API;
+using GammaRay.Core.API.Services;
 using GammaRay.Core.Host;
 using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
@@ -86,7 +87,12 @@ internal class Program
 
 
 				.AddSingleton<APIBasedMonitoringProvider>()
-				.AddSingleton<GammaRayApiService>()
+				.AddSingleton<APIBasicService>()
+				.AddSingleton<APIChannelsService>()
+				.AddSingleton<APIControlService>()
+				.AddSingleton<APIMonitoringService>()
+				.AddSingleton<APIServicesService>()
+				.AddSingleton<APISettingsService>()
 				.AddSingleton<APIServer>()
 
 				.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });

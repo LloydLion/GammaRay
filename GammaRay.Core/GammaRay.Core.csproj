@@ -21,7 +21,13 @@
   </ItemGroup>
    
   <ItemGroup>
-    <Protobuf Include="API\GammaRay.proto" />
+    <Protobuf Include="API\Services\common.proto" />
+    <Protobuf Include="API\Services\ChannelsService.proto" />
+    <Protobuf Include="API\Services\ServicesService.proto" />
+    <Protobuf Include="API\Services\MonitoringService.proto" />
+    <Protobuf Include="API\Services\ControlService.proto" />
+    <Protobuf Include="API\Services\SettingsService.proto" />
+    <Protobuf Include="API\Services\BasicService.proto" />
   </ItemGroup>
 
 </Project>
