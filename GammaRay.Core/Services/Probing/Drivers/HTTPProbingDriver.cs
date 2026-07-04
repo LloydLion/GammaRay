@@ -233,7 +233,9 @@ public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 			if (_wrapper is not null)
 				_wrapper.ReInit(dataFlow);
 			else _wrapper = new DataFlowStreamWrapper(dataFlow);
+#if DEBUG
 			_targetEndPoint = targetEndPoint;
+#endif
 			return new(this);
 		}
 

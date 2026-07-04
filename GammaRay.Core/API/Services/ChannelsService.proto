@@ -3,7 +3,6 @@ syntax = "proto3";
 package GammaRay.Core.API;
 
 import "google/protobuf/duration.proto";
-import "API/Services/common.proto";
 
 option csharp_namespace = "GammaRay.Core.API.Services.Proto";
 

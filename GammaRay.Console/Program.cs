@@ -79,7 +79,9 @@ internal class Program
 
 				.AddSingleton<SmartRouter>()
 
+#if DEBUG
 				.AddSingleton<IMonitoringProvider, ConsoleMonitoringProvider>()
+#endif
 				.AddSingleton<IMonitoringProvider>(sp => sp.GetRequiredService<APIBasedMonitoringProvider>())
 				.AddSingleton<MonitoringSystem>()
 				.AddSingleton(sp => sp.GetRequiredService<MonitoringSystem>().Context)
