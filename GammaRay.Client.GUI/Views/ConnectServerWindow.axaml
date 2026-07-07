@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+		xmlns:vm="clr-namespace:GammaRay.Client.GUI.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="200"
+		x:DataType="vm:ConnectServerWindowViewModel"
+        x:Class="GammaRay.Client.GUI.ConnectServerWindow"
+		Width="400" Height="200" MinWidth="400" MinHeight="200"
+        Title="Connect to server">
+
+	<Design.DataContext>
+		<vm:ConnectServerWindowViewModel/>
+	</Design.DataContext>
+    
+	<Grid>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition/>
+		</Grid.ColumnDefinitions>
+
+		<Grid.RowDefinitions>
+			<RowDefinition Height="*"/>
+			<RowDefinition Height="*"/>
+			<RowDefinition Height="*"/>
+		</Grid.RowDefinitions>
+
+		<TextBox Grid.Row="0"
+				 HorizontalAlignment="Stretch"
+				 Text="{Binding HostName}"
+				 Margin="25 10 25 10"
+				 VerticalAlignment="Center"
+				 PlaceholderText="Host name"/>
+		
+		<TextBox Grid.Row="1"
+				 HorizontalAlignment="Stretch"
+				 Text="{Binding Port}"
+				 Margin="25 10 25 10"
+				 VerticalAlignment="Center"
+				 PlaceholderText="Port"/>
+
+
+		<Button Grid.Row="2"
+				Content="Connect"
+				Margin="25 10 25 10"
+				HorizontalAlignment="Right"
+				Padding="25 5 25 5"
+				IsEnabled="{Binding IsValid}"
+				Click="OnConnectButtonClick"/>
+
+	</Grid>
+
+</Window>

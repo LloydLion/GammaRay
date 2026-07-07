@@ -5,11 +5,16 @@ public static class MathExtensions
 	extension<TComparable>(TComparable)
 		where TComparable : IComparable<TComparable>
 	{
-		public static bool operator<(TComparable a, TComparable b) => a.CompareTo(b) < 0;
+		public static bool operator <(TComparable a, TComparable b) => a.CompareTo(b) < 0;
+
 		public static bool operator >(TComparable a, TComparable b) => a.CompareTo(b) > 0;
+
 		public static bool operator >=(TComparable a, TComparable b) => a.CompareTo(b) >= 0;
+
 		public static bool operator <=(TComparable a, TComparable b) => a.CompareTo(b) <= 0;
+
 		public static bool operator ==(TComparable a, TComparable b) => a.CompareTo(b) == 0;
+
 		public static bool operator !=(TComparable a, TComparable b) => a.CompareTo(b) != 0;
 	}
 
@@ -21,6 +26,20 @@ public static class MathExtensions
 			if (value > max) return max;
 			else if (value < min) return min;
 			else return value;
+		}
+
+		public static TComparable Min<TComparable>(TComparable a, TComparable b)
+			where TComparable : IComparable<TComparable>
+		{
+			if (a > b) return b;
+			return a;
+		}
+
+		public static TComparable Max<TComparable>(TComparable a, TComparable b)
+			where TComparable : IComparable<TComparable>
+		{
+			if (a > b) return a;
+			return b;
 		}
 	}
 }

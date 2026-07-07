@@ -1,0 +1,39 @@
+﻿{
+	"Logging":
+	{
+		"EnableSelfLog": false,
+		"MinimumLevel": "Debug",
+		"WriteTo":
+		{
+			"Console":
+			{
+				"Template": "[{Timestamp:HH:mm:ss} {Level:u3}][{SourceContext}] {Properties:j} {Message:lj}{NewLine}{Exception}"
+			},
+			"File":
+			{
+				"Path": "log.json.log",
+				"RollingInterval": "Day"
+			},
+			"Seq":
+			{
+				"ServerUrl": "http://localhost:1111"
+			}
+		}
+	},
+
+	"Persistence":
+	{
+		"DatabaseLocation": "data.db",
+		"RecordTtl": "01:00:00"
+	},
+
+	"Settings":
+	{
+		"Location": "settings.json"
+	},
+
+	"Proxy":
+	{
+		"MasterTimeout": "00:00:03"
+	}
+}

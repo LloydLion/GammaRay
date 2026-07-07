@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 xmlns:vm="clr-namespace:GammaRay.Client.GUI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="450"
+			 x:DataType="vm:ServicesViewModel"
+             x:Class="GammaRay.Client.GUI.Views.ServicesView">
+	<Design.DataContext>
+		<vm:ServicesViewModel/>
+	</Design.DataContext>
+
+	<DataGrid ItemsSource="{Binding Services}" RowHeight="20">
+		<DataGrid.Columns>
+			<DataGridTextColumn Header="EndPoint" Binding="{Binding EndPoint}"/>
+			<DataGridTextColumn Header="Class" Binding="{Binding CapabilityClass}"/>
+			<DataGridTextColumn Header="Remaining" Binding="{Binding RemainingTime, StringFormat={}{0:dd\\d\\ hh\\:mm}}"/>
+			<DataGridTextColumn Header="Status table" Binding="{Binding StatusTable}" FontSize="12"/>
+		</DataGrid.Columns>
+	</DataGrid>
+</UserControl>

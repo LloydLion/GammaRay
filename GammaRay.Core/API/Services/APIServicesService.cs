@@ -51,7 +51,7 @@ public sealed class APIServicesService(IServiceRepository _services, IServiceSta
 			Port = service.Value.EndPoint.Port,
 			Protocol = Convert(service.Value.EndPoint.Protocol),
 			CapabilityClass = service.Value.Capability.Class.Name,
-			ServiceDecayTime = Timestamp.FromDateTime(service.ValidUntil)
+			ServiceDecayTime = Timestamp.FromDateTime(new DateTime(service.ValidUntil.Ticks, DateTimeKind.Utc))
 		};
 
 		foreach (var (key, value) in service.Value.Capability.Properties)
@@ -60,7 +60,7 @@ public sealed class APIServicesService(IServiceRepository _services, IServiceSta
 		var statusTable = _serviceStatuses.TryGetTable(service.Value);
 		if (statusTable is not null)
 		{
-			response.StatusTableDecayTime = Timestamp.FromDateTime(statusTable.Value.ValidUntil);
+			response.StatusTableDecayTime = Timestamp.FromDateTime(new DateTime(statusTable.Value.ValidUntil.Ticks, DateTimeKind.Utc));
 
 			foreach (var (IAP, iapStatus) in statusTable.Value.Value.Table)
 			{

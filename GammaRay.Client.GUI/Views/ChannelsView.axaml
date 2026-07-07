@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:GammaRay.Client.GUI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="450"
+			 x:DataType="vm:ChannelsViewModel"
+             x:Class="GammaRay.Client.GUI.Views.ChannelsView">
+
+	<Design.DataContext>
+		<vm:ChannelsViewModel/>
+	</Design.DataContext>
+
+	<DataGrid ItemsSource="{Binding Channels}" RowHeight="20">
+		<DataGrid.Columns>
+			<DataGridTextColumn Header="Channel" Binding="{Binding Channel}"/>
+			<DataGridTextColumn Header="Network" Binding="{Binding Network}"/>
+			<DataGridTextColumn Header="CAT" Binding="{Binding CharacteristicAccessTime, StringFormat={}{0:ss\\.fff}}"/>
+			<DataGridCheckBoxColumn Header="Available" Binding="{Binding IsAvailable}"/>
+		</DataGrid.Columns>
+	</DataGrid>
+</UserControl>

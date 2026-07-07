@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:views="clr-namespace:GammaRay.Client.GUI.Views"
+        xmlns:vm="clr-namespace:GammaRay.Client.GUI.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="450"
+		
+		x:DataType="vm:MainViewModel"
+        x:Class="GammaRay.Client.GUI.Views.MainWindow"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="GammaRay">
+
+	<DockPanel>
+		<Menu DockPanel.Dock="Top">
+			<MenuItem Header="Connection">
+				<MenuItem Header="New" Command="{Binding OpenNewServerConnectionCommand}"/>
+				<MenuItem Header="Disconnect" Command="{Binding DisconnectFromServerCommand}"/>
+			</MenuItem>
+		</Menu>
+
+		<Grid>
+			<Grid.ColumnDefinitions>
+				<ColumnDefinition Width="*"/>
+				<ColumnDefinition Width="Auto"/>
+			</Grid.ColumnDefinitions>
+			<Grid.RowDefinitions>
+				<RowDefinition Height="2*"/>
+				<RowDefinition Height="*"/>
+			</Grid.RowDefinitions>
+
+			<views:ConnectionsView Grid.Column="0" Grid.Row="0" DataContext="{Binding Connections}"/>
+			<views:ChannelsView Grid.Column="0" Grid.Row="1" DataContext="{Binding Channels}"/>
+			<views:ServicesView Grid.Column="1" Grid.RowSpan="2" DataContext="{Binding Services}"/>
+		</Grid>
+	</DockPanel>
+
+</Window>

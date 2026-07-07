@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:GammaRay.Client.GUI.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+			 x:DataType="vm:ConnectionsViewModel"
+             x:Class="GammaRay.Client.GUI.Views.ConnectionsView">
+	<Design.DataContext>
+		<vm:ConnectionsViewModel/>
+	</Design.DataContext>
+		
+	<DataGrid ItemsSource="{Binding Connections}" RowHeight="20">
+		<DataGrid.Columns>
+			<DataGridTextColumn Header="Inbound" Binding="{Binding Inbound}"/>
+			<DataGridTextColumn Header="Source" Binding="{Binding EndPoint}"/>
+			<DataGridTextColumn Header="Destination" Binding="{Binding Destination}"/>
+			<DataGridTextColumn Header="Routing decision" Binding="{Binding RoutingResult}"/>
+		</DataGrid.Columns>
+	</DataGrid>
+</UserControl>

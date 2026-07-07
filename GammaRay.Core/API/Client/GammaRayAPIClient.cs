@@ -96,6 +96,7 @@ public class GammaRayAPIClient() : IGammaRayAPIClient
 				}
 			}
 		}
+		catch (RpcException rpc) when (rpc.StatusCode == StatusCode.Cancelled) { }
 		catch (OperationCanceledException) { }
 		catch (Exception ex)
 		{

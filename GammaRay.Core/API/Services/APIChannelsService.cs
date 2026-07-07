@@ -20,10 +20,10 @@ public sealed class APIChannelsService(
 
 		IEnumerable<(InternetAccessPoint IAP, string channelName, IAPChannel channel)> targetChannels = (request.IAP, request.Channel) switch
 		{
-			("", "") => _IAPs.PlainInternetAccessPoints.SelectMany(iap => iap.Channels.Select(channel => (iap, channel.Key, channel.Value))),
-			(var iap, "") => _IAPs.InternetAccessPoints[iap].Channels.Select(channel => (_IAPs.InternetAccessPoints[iap], channel.Key, channel.Value)),
+			("", "") => _IAPs.PlainRemoteInternetAccessPoints.SelectMany(iap => iap.Channels.Select(channel => (iap, channel.Key, channel.Value))),
+			(var iap, "") => _IAPs.RemoteInternetAccessPoints[iap].Channels.Select(channel => (_IAPs.RemoteInternetAccessPoints[iap], channel.Key, channel.Value)),
 			("", var channel) => throw new InvalidOperationException("Invalid query: channel is set, but IAP is not"),
-			(var iap, var channel) => [(_IAPs.InternetAccessPoints[iap], channel, _IAPs.InternetAccessPoints[iap].Channels[channel])]
+			(var iap, var channel) => [(_IAPs.RemoteInternetAccessPoints[iap], channel, _IAPs.RemoteInternetAccessPoints[iap].Channels[channel])]
 		};
 
 		foreach (var (IAP, channelName, channel) in targetChannels)
