@@ -1,7 +1,5 @@
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.Routing;
-using GammaRay.Core.Routing.Categorization;
-using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Utils;
 using YamlDotNet.RepresentationModel;
 
@@ -24,15 +22,23 @@ public sealed class YAMLEndPointRoutingConfigurationRawProvider : IRawSettingsPr
 	{
 		_endpointRoutingConfigurations = LoadEndpointRoutingConfigurations(
 			YAMLLoader.GetFragment<YamlMappingNode>("endpointRoutingConfigurations"),
-			internetAccessPointProvider.PlainInternetAccessPoints
+			internetAccessPointProvider.InternetAccessPoints
 		);
 	}
 
 	private static Dictionary<string, EndPointRoutingConfiguration> LoadEndpointRoutingConfigurations(
 		YamlMappingNode node,
-		IReadOnlyCollection<InternetAccessPoint> accessPoints
-	) =>
-		node.ScalarChildrenMap.Select(kv =>
+		IReadOnlyDictionary<string, InternetAccessPoint> accessPoints
+	)
+	{
+		IEnumerable<InternetAccessPoint> getIAPsUsingPattern(string pattern)
+		{
+			if (pattern.EndsWith('*'))
+				return accessPoints.Values.Where(IAP => IAP.Name.StartsWith(pattern.AsSpan()[..^1]));
+			else return [accessPoints[pattern]];
+		}
+
+		return node.ScalarChildrenMap.Select(kv =>
 		{
 			var name = kv.Key;
 			var node = (YamlMappingNode)kv.Value;
@@ -42,12 +48,14 @@ public sealed class YAMLEndPointRoutingConfigurationRawProvider : IRawSettingsPr
 			var requiredChannelTags = node.TryBindChild<string[][]>("requiredChannelTags") ?? [];
 
 			var rawIAPChain = node["IAPChain"].Bind<string[][]>();
-			var IAPChain = new InternetAccessPointChain(rawIAPChain.Select(blob => new InternetAccessPointBlob(blob.SelectMany(iapPattern =>
-			{
-				if (iapPattern.EndsWith('*'))
-					return accessPoints.Where(IAP => IAP.Name.StartsWith(iapPattern.AsSpan()[..^1]));
-				else return [accessPoints.Single(IAP => IAP.Name == iapPattern)];
-			}).ToArray())).ToArray());
+			var IAPChain = new InternetAccessPointChain(
+				rawIAPChain.Select(blob => new InternetAccessPointBlob(blob.SelectMany(getIAPsUsingPattern).ToArray())).ToArray()
+			);
+
+			var rawDefaultIAPChain = node.TryBindChild<string[]>("defaultIAPChain");
+			var defaultIAPChain = rawDefaultIAPChain is not null
+				? rawDefaultIAPChain.SelectMany(getIAPsUsingPattern).ToArray()
+				: IAPChain.Reverse().PlainListOfPoints;
 
 
 			var cfg = new EndPointRoutingConfiguration(name)
@@ -56,9 +64,10 @@ public sealed class YAMLEndPointRoutingConfigurationRawProvider : IRawSettingsPr
 				TagsPolicy = tagsRequirementMode,
 				RequiredTags = requiredChannelTags,
 				IAPChain = IAPChain,
-				DefaultIAPChain = IAPChain.Reverse()
+				DefaultIAPChain = defaultIAPChain
 			};
 
 			return KeyValuePair.Create(name, cfg);
 		}).ToDictionary();
+	}
 }

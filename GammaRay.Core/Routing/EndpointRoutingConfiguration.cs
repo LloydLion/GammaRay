@@ -5,7 +5,7 @@ namespace GammaRay.Core.Routing;
 
 public sealed class EndPointRoutingConfiguration(string name)
 {
-	private readonly Dictionary<InternetAccessPointProvider, InternetAccessPointChain> _extendedChainsCache = [];
+	private (InternetAccessPointProvider Provider, InternetAccessPointChain Chain)? _extendedChainCache = null;
 
 
 	public InternetAccessPointChain IAPChain { get; init; } = InternetAccessPointChain.Empty;
@@ -16,7 +16,7 @@ public sealed class EndPointRoutingConfiguration(string name)
 
 	public RequirementPolicy TagsPolicy { get; init; } = RequirementPolicy.Restricted;
 
-	public InternetAccessPointChain DefaultIAPChain { get; init; } = InternetAccessPointChain.Empty;
+	public IReadOnlyList<InternetAccessPoint> DefaultIAPChain { get; init; } = [];
 
 	public string Name { get; } = name;
 
@@ -26,11 +26,11 @@ public sealed class EndPointRoutingConfiguration(string name)
 		if (ChainPolicy == RequirementPolicy.Restricted)
 			return IAPChain;
 
-		if (_extendedChainsCache.TryGetValue(internetAccessPointProvider, out var extendedChain))
-			return extendedChain;
+		if (_extendedChainCache is not null && _extendedChainCache.Value.Provider == internetAccessPointProvider)
+			return _extendedChainCache.Value.Chain;
 
-		extendedChain = IAPChain.Extend(internetAccessPointProvider);
-		_extendedChainsCache.Add(internetAccessPointProvider, extendedChain);
+		var extendedChain = IAPChain.Extend(internetAccessPointProvider);
+		_extendedChainCache = (internetAccessPointProvider, extendedChain);
 		return extendedChain;
 	}
 

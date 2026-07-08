@@ -125,12 +125,25 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 
 	private async ValueTask<bool> PingInternet()
 	{
-		var reply = await _pingAgent.SendPingAsync(InternetAddress, PingTimeout);
-		return reply.Status switch
+		int successInRow = 0;
+		for (int i = 0; i < 5; i++)
 		{
-			IPStatus.Success => true,
-			_ => false
-		};
+			var reply = await _pingAgent.SendPingAsync(InternetAddress, PingTimeout);
+			var success = reply.Status == IPStatus.Success;
+			if (success)
+				successInRow++;
+			else successInRow = 0;
+
+			if (successInRow == 3)
+				return true;
+
+			var remainingTries = 5 - i - 1;
+			var requiredSuccessesInRow = 3 - successInRow;
+			if (requiredSuccessesInRow > remainingTries)
+				return false;
+		}
+
+		return false;
 	}
 
 	private void NetworkChanged(object? sender, EventArgs e)

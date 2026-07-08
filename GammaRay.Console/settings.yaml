@@ -42,10 +42,17 @@ capabilityClasses:
 
 endpointRoutingConfigurations:
   default:
+    IAPChain: [ [local:*, finlandProxy] ]
+    defaultIAPChain: [ finlandProxy, local:* ]
+
+  ruDomains:
     IAPChain: [ [local:*], [finlandProxy] ]
+    defaultIAPChain: [ local:* ]
+
   viaProxy:
     IAPChain: [ [finlandProxy] ]
     queueMode: restricted
+
   viaLocal:
     IAPChain: [ [local:*] ]
     queueMode: restricted
@@ -53,10 +60,9 @@ endpointRoutingConfigurations:
 networkProfiles: {}
 
 endPointCategories:
-  blockedInRussia:
-    list: blocked.txt
-  blockedInNonRussia:
-    list: local.txt
+  ruDomains: { patterns: [ ru ] }
+  blockedInRussia: { patternsListFile: blocked.txt }
+  blockedInNonRussia: { patternsListFile: local.txt }
 
 routingRules:
   - endPointCategory: blockedInRussia
@@ -65,5 +71,8 @@ routingRules:
 
   - endPointCategory: blockedInNonRussia
     to: viaLocal
+
+  - endPointCategory: ruDomains
+    to: ruDomains
 
   - to: default

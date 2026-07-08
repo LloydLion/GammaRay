@@ -29,11 +29,9 @@ public class YAMLEndPointCategoryRawProvider(IFileSystemLocator _fileSystemLocat
 
 			var patterns = new List<EndPointPattern>();
 
-			if (node.TryGet<YamlScalarNode>("list", out var listNode))
+			if (node.TryBindChild<string>("patternsListFile", out var filePath))
 			{
-				var path = listNode.Bind<string>();
-
-				using var stream = _fileSystemLocator!.Open(path);
+				using var stream = _fileSystemLocator!.Open(filePath);
 				using var reader = new StreamReader(stream);
 				while (true)
 				{
@@ -47,6 +45,10 @@ public class YAMLEndPointCategoryRawProvider(IFileSystemLocator _fileSystemLocat
 					patterns.Add(EndPointPattern.Parse(line));
 				}
 			}
+
+			if (node.TryBindChild<string[]>("patterns", out var patternsExplicitList))
+				patterns.AddRange(patternsExplicitList.Select(EndPointPattern.Parse));
+
 			return new EndPointCategory(name, patterns);
 		}).ToDictionary(s => s.Name);
 }

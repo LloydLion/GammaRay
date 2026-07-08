@@ -94,14 +94,11 @@ public sealed class SmartRouter(
 			// In case of no route fallback to routing using default IAP chain
 		}
 
-		foreach (var blob in routingConfiguration.DefaultIAPChain.Blobs)
+		foreach (var IAP in routingConfiguration.DefaultIAPChain)
 		{
-			foreach (var IAP in blob.Points)
-			{
-				var status = _channelPicker.PickBestChannel(IAP, networkProfile, channelRequirements);
-				if (status is not null and { Status.IsAvailable: true })
-					{ result = (IAP, status.Value.Channel); goto returnResult; }
-			}
+			var status = _channelPicker.PickBestChannel(IAP, networkProfile, channelRequirements);
+			if (status is not null and { Status.IsAvailable: true })
+				{ result = (IAP, status.Value.Channel); goto returnResult; }
 		}
 
 		throw new Exception("Good game, well played, there is just no way to route this shit");
