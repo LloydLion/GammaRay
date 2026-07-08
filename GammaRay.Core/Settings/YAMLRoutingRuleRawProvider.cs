@@ -1,6 +1,6 @@
+using GammaRay.Core.Network.Profiles;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Routing.Categorization;
-using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Routing.Rules;
 using GammaRay.Core.Utils.ValueMatching;
 using System.Data;

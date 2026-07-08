@@ -1,7 +1,7 @@
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.Network;
-using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Network.Profiles;
 using YamlDotNet.RepresentationModel;
 
 namespace GammaRay.Core.Settings;

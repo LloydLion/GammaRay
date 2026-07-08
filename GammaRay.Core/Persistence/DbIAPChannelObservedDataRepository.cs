@@ -2,7 +2,7 @@ using Dapper;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.InternetAccess.Channels.Testing;
-using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Network.Profiles;
 using System.Data;
 
 namespace GammaRay.Core.Persistence;

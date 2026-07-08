@@ -1,6 +1,6 @@
 using GammaRay.Core.Network.Identity;
 
-namespace GammaRay.Core.Routing.NetworkProfiles;
+namespace GammaRay.Core.Network.Profiles;
 
 public interface INetworkProfileMappingRepository
 {

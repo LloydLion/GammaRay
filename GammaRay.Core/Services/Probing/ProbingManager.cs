@@ -3,7 +3,7 @@ using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Identity;
-using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Network.Profiles;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
 using System.Threading.Channels;

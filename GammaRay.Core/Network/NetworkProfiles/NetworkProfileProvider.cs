@@ -1,6 +1,6 @@
 using GammaRay.Core.Settings;
 
-namespace GammaRay.Core.Routing.NetworkProfiles;
+namespace GammaRay.Core.Network.Profiles;
 
 public sealed class NetworkProfileProvider
 {

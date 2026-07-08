@@ -2,7 +2,7 @@ using GammaRay.Core.API.Services.Proto;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.InternetAccess.Channels.Testing;
-using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Network.Profiles;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 

@@ -1,4 +1,4 @@
-using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Network.Profiles;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 

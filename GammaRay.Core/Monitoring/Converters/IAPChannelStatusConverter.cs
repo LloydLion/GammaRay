@@ -1,7 +1,4 @@
-using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
-using GammaRay.Core.Routing.NetworkProfiles;
-using System.Runtime.Intrinsics.X86;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 

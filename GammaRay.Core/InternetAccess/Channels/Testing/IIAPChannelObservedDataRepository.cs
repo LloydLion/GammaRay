@@ -1,4 +1,4 @@
-using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Network.Profiles;
 
 namespace GammaRay.Core.InternetAccess.Channels.Testing;
 

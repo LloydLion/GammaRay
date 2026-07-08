@@ -1,4 +1,4 @@
-using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Network.Profiles;
 using YamlDotNet.RepresentationModel;
 
 namespace GammaRay.Core.Settings;

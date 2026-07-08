@@ -1,7 +1,7 @@
 using GammaRay.Core.InternetAccess;
+using GammaRay.Core.Network.Profiles;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Routing.Categorization;
-using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using System.Text.Json;
 

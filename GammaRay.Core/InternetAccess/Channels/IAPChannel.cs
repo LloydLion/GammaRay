@@ -1,5 +1,5 @@
 using GammaRay.Core.Network;
-using GammaRay.Core.Routing.NetworkProfiles;
+using GammaRay.Core.Network.Profiles;
 using System.Collections.Immutable;
 
 namespace GammaRay.Core.InternetAccess.Channels

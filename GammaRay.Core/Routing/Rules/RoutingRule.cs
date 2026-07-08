@@ -1,5 +1,5 @@
+using GammaRay.Core.Network.Profiles;
 using GammaRay.Core.Routing.Categorization;
-using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Utils.ValueMatching;
 
 namespace GammaRay.Core.Routing.Rules;
