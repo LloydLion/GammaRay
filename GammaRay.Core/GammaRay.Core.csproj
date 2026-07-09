@@ -26,6 +26,7 @@
     <Protobuf Include="API\Services\ServicesService.proto" />
     <Protobuf Include="API\Services\MonitoringService.proto" />
     <Protobuf Include="API\Services\ControlService.proto" />
+    <Protobuf Include="API\Services\NetworkService.proto" />
     <Protobuf Include="API\Services\SettingsService.proto" />
     <Protobuf Include="API\Services\BasicService.proto" />
   </ItemGroup>

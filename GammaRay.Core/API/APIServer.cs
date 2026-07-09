@@ -11,7 +11,8 @@ public sealed class APIServer(
 	APIControlService _service3,
 	APIMonitoringService _service4,
 	APIServicesService _service5,
-	APISettingsService _service6
+	APISettingsService _service6,
+	APINetworkService _service7
 )
 {
 	private Server? _server;
@@ -31,7 +32,8 @@ public sealed class APIServer(
 				ControlService.BindService(_service3),
 				MonitoringService.BindService(_service4),
 				ServicesService.BindService(_service5),
-				SettingsService.BindService(_service6)
+				SettingsService.BindService(_service6),
+				NetworkService.BindService(_service7)
 			}
 		};
 

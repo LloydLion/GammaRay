@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package GammaRay.Core.API;
+
+import "API/Services/common.proto";
+
+option csharp_namespace = "GammaRay.Core.API.Services.Proto";
+
+service NetworkService {
+	rpc GetCurrentNetworkIdentity(Empty) returns (NetworkIdentity);
+	rpc QueryNetworkProfileMapping(NetworkProfileMappingFilter) returns (stream NetworkProfileMapping);
+	rpc SetNetworkProfileMapping(NetworkProfileMapping) returns (Empty);
+}
+
+message NetworkIdentity {
+	optional string serializedForm = 1;
+}
+
+message NetworkProfileMappingFilter {
+	string networkIdentity = 1;
+}
+
+message NetworkProfileMapping {
+	string networkIdentity = 1;
+	optional string networkProfile = 2;
+}

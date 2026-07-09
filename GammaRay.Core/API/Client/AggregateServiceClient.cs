@@ -16,4 +16,6 @@ internal sealed class AggregateServiceClient(Channel channel)
 	public ServicesService.ServicesServiceClient Services { get; } = new ServicesService.ServicesServiceClient(channel);
 
 	public SettingsService.SettingsServiceClient Settings { get; } = new SettingsService.SettingsServiceClient(channel);
+
+	public NetworkService.NetworkServiceClient Network { get; } = new NetworkService.NetworkServiceClient(channel);
 }

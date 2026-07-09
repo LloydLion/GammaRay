@@ -23,6 +23,7 @@ using GammaRay.Core.Utils;
 using GammaRay.Core.Utils.FileSystem;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Collections.Immutable;
 
 internal class Program
 {
@@ -46,6 +47,7 @@ internal class Program
 				.Configure<DbServiceStatusTableRepository.Options>(s => { })
 				.AddSingleton<IServiceStatusTableRepository, DbServiceStatusTableRepository>()
 				.AddSingleton<IIAPChannelObservedDataRepository, DbIAPChannelObservedDataRepository>()
+				.AddSingleton<INetworkProfileMappingRepository, DbNetworkProfileMappingRepository>()
 
 				.Configure<HTTPInboundDriver.Options>(s => { })
 				.AddSingleton<IInboundDriver, HTTPInboundDriver>()
@@ -66,7 +68,6 @@ internal class Program
 #else
 				.AddSingleton<INetworkIdentifier, InterfaceBasedNetworkIdentifier>()
 #endif
-				.AddSingleton<INetworkProfileMappingRepository, DummyNetProfileMapping>()
 
 				.AddSingleton<ICapabilityDetector, DefaultCapabilityDetector>()
 				.Configure<ProbingManager.Options>(s => { })
@@ -95,6 +96,7 @@ internal class Program
 				.AddSingleton<APIMonitoringService>()
 				.AddSingleton<APIServicesService>()
 				.AddSingleton<APISettingsService>()
+				.AddSingleton<APINetworkService>()
 				.AddSingleton<APIServer>()
 
 				.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
@@ -104,6 +106,7 @@ internal class Program
 			((DbServiceRepository)sp.GetRequiredService<IServiceRepository>()).Initialize();
 			((DbServiceStatusTableRepository)sp.GetRequiredService<IServiceStatusTableRepository>()).Initialize();
 			((DbIAPChannelObservedDataRepository)sp.GetRequiredService<IIAPChannelObservedDataRepository>()).Initialize();
+			((DbNetworkProfileMappingRepository)sp.GetRequiredService<INetworkProfileMappingRepository>()).Initialize();
 
 			((DefaultIAPChannelMonitor)sp.GetRequiredService<IIAPChannelMonitor>()).StartMonitoring();
 
@@ -211,7 +214,11 @@ internal class Program
 
 	public class DummyNetProfileMapping(NetworkProfileProvider _networkProfileProvider) : INetworkProfileMappingRepository
 	{
+		public IReadOnlyDictionary<NetworkIdentity, NetworkProfile?> GetMapping() => ImmutableDictionary<NetworkIdentity, NetworkProfile?>.Empty;
+
 		public NetworkProfile GetProfileFor(NetworkIdentity identity) => _networkProfileProvider.DefaultProfile;
+
+		public void SetProfileFor(NetworkIdentity identity, NetworkProfile profile) { }
 	}
 
 	private class Locator : IFileSystemLocator

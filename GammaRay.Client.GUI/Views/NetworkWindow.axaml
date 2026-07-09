@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+		xmlns:vm="clr-namespace:GammaRay.Client.GUI.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+		Width="800" Height="450"
+		x:DataType="vm:NetworkWindowViewModel"
+        x:Class="GammaRay.Client.GUI.Views.NetworkWindow"
+        Title="Networks">
+	<Design.DataContext>
+		<vm:NetworkWindowViewModel/>
+	</Design.DataContext>
+
+	<Grid>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="*"/>
+			<ColumnDefinition Width="Auto"/>
+		</Grid.ColumnDefinitions>
+
+		<StackPanel Margin="20">
+			<TextBlock Text="Current identuty:"/>
+			<TextBlock Margin="20 0 0 0" Text="{Binding CurrentIdentity}" TextWrapping="Wrap"/>
+			<Separator/>
+			<TextBlock Text="Current profile:"/>
+			<TextBlock Margin="20 0 0 0" Text="{Binding CurrentProfile}"/>
+
+			<Button Margin="20" Content="Apply changes" Command="{Binding ApplyChangesCommand}"/>
+		</StackPanel>
+
+		<DataGrid ItemsSource="{Binding Mapping}" Grid.Column="1">
+			<DataGrid.Columns>
+				<DataGridTextColumn Header="Network identity" Binding="{Binding Identity}" IsReadOnly="True"/>
+				<DataGridTextColumn Header="Network profile" Binding="{Binding Profile}" IsReadOnly="False"/>
+			</DataGrid.Columns>
+		</DataGrid>
+	</Grid>
+
+</Window>

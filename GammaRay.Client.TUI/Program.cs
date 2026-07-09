@@ -1,12 +1,11 @@
 using GammaRay.Client.TUI;
-using GammaRay.Core.API;
 using GammaRay.Core.API.Client;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Monitoring.Converters;
+using GammaRay.Core.Network.Profiles;
 using GammaRay.Core.Routing;
 using GammaRay.Core.Routing.Categorization;
-using GammaRay.Core.Routing.NetworkProfiles;
 using GammaRay.Core.Services;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils.FileSystem;

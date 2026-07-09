@@ -1,6 +1,7 @@
 using GammaRay.Core.API.Client;
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Monitoring.Converters;
+using GammaRay.Core.Network.Profiles;
 
 namespace GammaRay.Client.GUI.ViewModels;
 
@@ -11,7 +12,8 @@ public sealed class ServerConnection(
 	MonitoringSystem monitoringSystem,
 	APIMonitoringEventListener eventListener,
 	ServerStateObserver observer
-)
+,
+	NetworkProfileProvider networkProfiles)
 {
 	public GammaRayAPIClient APIClient { get; } = apiClient;
 
@@ -24,4 +26,6 @@ public sealed class ServerConnection(
 	public APIMonitoringEventListener EventListener { get; } = eventListener;
 
 	public ServerStateObserver Observer { get; } = observer;
+
+	public NetworkProfileProvider NetworkProfiles { get; } = networkProfiles;
 }

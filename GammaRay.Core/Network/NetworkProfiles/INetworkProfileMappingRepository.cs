@@ -4,7 +4,11 @@ namespace GammaRay.Core.Network.Profiles;
 
 public interface INetworkProfileMappingRepository
 {
+	public IReadOnlyDictionary<NetworkIdentity, NetworkProfile?> GetMapping();
+
 	public NetworkProfile GetProfileFor(NetworkIdentity identity);
+
+	public void SetProfileFor(NetworkIdentity identity, NetworkProfile profile);
 }
 
 public static class INetworkProfileMappingRepositoryExtensions

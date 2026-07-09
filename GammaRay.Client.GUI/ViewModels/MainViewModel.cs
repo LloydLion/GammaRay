@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using DynamicData;
+using GammaRay.Client.GUI.Views;
 using GammaRay.Core.API.Client;
 using GammaRay.Core.API.Services.Proto;
 using GammaRay.Core.InternetAccess;
@@ -12,10 +13,12 @@ using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Services;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils;
+using Microsoft.Extensions.DependencyInjection;
 using ReactiveUI;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Reactive;
+using NetworkIdentity = GammaRay.Core.Network.Identity.NetworkIdentity;
 using ServiceIAPStatus = GammaRay.Core.Services.Probing.ServiceIAPStatus;
 
 namespace GammaRay.Client.GUI.ViewModels;
@@ -33,6 +36,7 @@ public class MainViewModel : ViewModelBase
 
 		OpenNewServerConnectionCommand = ReactiveCommand.CreateFromTask(ConnectToServer);
 		DisconnectFromServerCommand = ReactiveCommand.CreateFromTask(DisconnectFromServer, this.ObservableForProperty(x => x.IsConnected).Value());
+		OpenNetworkWindowCommand = ReactiveCommand.CreateFromTask(OpenNetworkWindow, this.ObservableForProperty(x => x.IsConnected).Value());
 	}
 
 
@@ -49,6 +53,8 @@ public class MainViewModel : ViewModelBase
 	public ReactiveCommand<Unit, Unit> OpenNewServerConnectionCommand { get; }
 
 	public ReactiveCommand<Unit, Unit> DisconnectFromServerCommand { get; }
+
+	public ReactiveCommand<Unit, Unit> OpenNetworkWindowCommand { get; }
 
 
 	private async Task ConnectToServer()
@@ -67,7 +73,12 @@ public class MainViewModel : ViewModelBase
 		var monitoringSystem = new MonitoringSystem([monitoringConnectionTracker]);
 
 		var settings = await _apiClient.RequestReadSettingsAsync();
-		var serializerOptionsSource = LoadSettings(settings);
+		var settingServicesBuilder = new ServiceCollection();
+		LoadSettings(settings, settingServicesBuilder);
+		settingServicesBuilder.AddSingleton<MonitoringSerializerOptionsSource>();
+		var settingServices = settingServicesBuilder.BuildServiceProvider();
+
+		var serializerOptionsSource = settingServices.GetRequiredService<MonitoringSerializerOptionsSource>();
 
 		var listener = new APIMonitoringEventListener(monitoringSystem, serializerOptionsSource);
 		_apiClient.AddEventListener(listener);
@@ -76,7 +87,8 @@ public class MainViewModel : ViewModelBase
 		observer.Start();
 
 		ServerConnection = new ServerConnection(
-			_apiClient, serializerOptionsSource, monitoringConnectionTracker, monitoringSystem, listener, observer
+			_apiClient, serializerOptionsSource, monitoringConnectionTracker,
+			monitoringSystem, listener, observer, settingServices.GetRequiredService<NetworkProfileProvider>()
 		);
 	}
 
@@ -97,7 +109,45 @@ public class MainViewModel : ViewModelBase
 		ServerConnection = null;
 	}
 
-	private static MonitoringSerializerOptionsSource LoadSettings(string settingsContent)
+	private async Task OpenNetworkWindow()
+	{
+		if (ServerConnection is null)
+			return;
+
+		var rawMapping = await ServerConnection.APIClient.QueryNetworkProfileMapping(new());
+		var mapping = rawMapping.Select(kv => new NetworkProfileMappingViewModel(kv.Key.SerializedForm, kv.Value ?? string.Empty)).ToArray();
+		var currentIdentity = await ServerConnection.APIClient.GetCurrentNetworkIdentity();
+
+		string? currentProfile = null;
+
+		if (currentIdentity is not null)
+		{
+			if (rawMapping.TryGetValue(currentIdentity.Value, out currentProfile) == false || currentProfile is null)
+				currentProfile = ServerConnection.NetworkProfiles.DefaultProfile.Name;
+		}
+
+		var applyChangesCommand = ReactiveCommand.CreateFromTask(async () => 
+		{
+			foreach (var mapItem in mapping.Where(s => s.WasChanged))
+			{
+				var identity = new NetworkIdentity(mapItem.Identity);
+
+				if (ServerConnection.NetworkProfiles.PlainProfiles.Select(s => s.Name).Contains(mapItem.Profile) == false)
+					mapItem.Profile = ServerConnection.NetworkProfiles.DefaultProfile.Name;
+
+				await ServerConnection.APIClient.SetNetworkProfileMapping(mapItem.Profile, identity);
+
+				mapItem.WasChanged = false;
+			}
+		});
+
+		var viewModel = new NetworkWindowViewModel(mapping, currentIdentity?.SerializedForm, currentProfile, applyChangesCommand);
+
+		var networkWindow = new NetworkWindow() { DataContext = viewModel };
+		networkWindow.Show(_owner);
+	}
+
+	private static void LoadSettings(string settingsContent, IServiceCollection output)
 	{
 		using var settingsFile = new StringReader(settingsContent);
 
@@ -116,16 +166,19 @@ public class MainViewModel : ViewModelBase
 		capabilityClassRawProvider.Initialize(YAMLLoader);
 
 		var networkProfileProvider = new NetworkProfileProvider(networkProfileRawProvider);
+		output.AddSingleton(networkProfileProvider);
 		var endPointCategoryProvider = new EndPointCategoriesProvider(endPointCategoryRawProvider);
+		output.AddSingleton(endPointCategoryProvider);
 		var capabilityClassProvider = new CapabilityClassProvider(capabilityClassRawProvider);
+		output.AddSingleton(capabilityClassProvider);
 
 		internetAccessPointRawProvider.Initialize(YAMLLoader, networkProfileProvider);
 		var internetAccessPointProvider = new InternetAccessPointProvider(internetAccessPointRawProvider, networkProfileProvider);
+		output.AddSingleton(internetAccessPointProvider);
 
 		endPointRoutingConfigurationRawProvider.Initialize(YAMLLoader, internetAccessPointProvider);
 		var endPointRoutingConfigurationProvider = new EndPointRoutingConfigurationProvider(endPointRoutingConfigurationRawProvider);
-
-		return new MonitoringSerializerOptionsSource(capabilityClassProvider, endPointCategoryProvider, endPointRoutingConfigurationProvider, internetAccessPointProvider, networkProfileProvider);
+		output.AddSingleton(endPointRoutingConfigurationProvider);
 	}
 }
 

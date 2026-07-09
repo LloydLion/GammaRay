@@ -1,6 +1,6 @@
 namespace GammaRay.Core.Network.Identity;
 
-public readonly struct NetworkIdentity
+public readonly struct NetworkIdentity : IEquatable<NetworkIdentity>
 {
 	public const char BannedDelimiterChar = '+';
 
@@ -8,31 +8,32 @@ public readonly struct NetworkIdentity
 	public NetworkIdentity(string[] identityStrings)
 	{
 		foreach (var str in identityStrings)
-		{
 			if (str.Contains(BannedDelimiterChar))
 				throw new ArgumentException($"Identity strings must not contain the character '{BannedDelimiterChar}'");
-		}
-		IdentityStrings = identityStrings;
+		SerializedForm = string.Join(BannedDelimiterChar, identityStrings);
 	}
 
 	public NetworkIdentity(string serializedForm)
 	{
-		IdentityStrings = serializedForm.Split(BannedDelimiterChar);
+		SerializedForm = serializedForm;
 	}
 
 
-	public string[] IdentityStrings { get; }
+	public string SerializedForm { get; }
 
 
-	public string SerializeToString()
-	{
-		return string.Join(BannedDelimiterChar, IdentityStrings);
-	}
 
-	public override int GetHashCode() => IdentityStrings[0].GetHashCode();
+	public string[] GetIdentityStrings() => SerializedForm.Split(BannedDelimiterChar);
 
-	public override bool Equals(object? obj) =>
-		obj is NetworkIdentity other && other.IdentityStrings.SequenceEqual(IdentityStrings);
+	public override int GetHashCode() => SerializedForm.GetHashCode();
 
-	public override string ToString() => SerializeToString();
+	public bool Equals(NetworkIdentity other) => other.SerializedForm == SerializedForm;
+
+	public override bool Equals(object? obj) => obj is NetworkIdentity other && Equals(other); 
+
+	public override string ToString() => SerializedForm;
+
+	public static bool operator ==(NetworkIdentity left, NetworkIdentity right) => left.Equals(right);
+
+	public static bool operator !=(NetworkIdentity left, NetworkIdentity right) => !(left == right);
 }

@@ -74,6 +74,32 @@ public class GammaRayAPIClient() : IGammaRayAPIClient
 		return result;
 	}
 
+	public async ValueTask<Network.Identity.NetworkIdentity?> GetCurrentNetworkIdentity()
+	{
+		var identity = await RequireConnection().ServiceClient.Network.GetCurrentNetworkIdentityAsync(new Empty());
+		return identity.HasSerializedForm ? new Network.Identity.NetworkIdentity(identity.SerializedForm) : null;
+	}
+
+	public async ValueTask<IReadOnlyDictionary<Network.Identity.NetworkIdentity, string?>> QueryNetworkProfileMapping(NetworkProfileMappingFilter filter)
+	{
+		var stream = RequireConnection().ServiceClient.Network.QueryNetworkProfileMapping(filter).ResponseStream;
+		var result = new Dictionary<Network.Identity.NetworkIdentity, string?>();
+		while (await stream.MoveNext())
+		{
+			var current = stream.Current;
+			result.Add(new Network.Identity.NetworkIdentity(current.NetworkIdentity), current.HasNetworkProfile ? current.NetworkProfile : null);
+		}
+		return result;
+	}
+
+	public async ValueTask SetNetworkProfileMapping(string profile, Network.Identity.NetworkIdentity identity)
+	{
+		await RequireConnection().ServiceClient.Network.SetNetworkProfileMappingAsync(
+			new NetworkProfileMapping() { NetworkIdentity = identity.SerializedForm, NetworkProfile = profile }
+		);
+	}
+	
+
 	private async Task ReceiveEventsLoop(ConnectionContext connection)
 	{
 		await Task.Yield();
