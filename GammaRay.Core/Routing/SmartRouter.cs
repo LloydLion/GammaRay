@@ -52,10 +52,9 @@ public sealed class SmartRouter(
 		else service = serviceDecay.Value.Value;
 
 
-		var statusTableDec = _routeRepository.TryGetTable(service);
-		if (statusTableDec is null || statusTableDec.Value.IsValid(context.InitialTime) == false)
-			_prober.StartProbing(service, IAPChain.PlainListOfPoints, _routeRepository);
+		_prober.StartProbingIfNeed(service, IAPChain.PlainListOfPoints, _routeRepository);
 
+		var statusTableDec = _routeRepository.TryGetTable(service);
 
 		var channelRequirements = new IAPChannelRequirements() { RequiredTags = routingConfiguration.RequiredTags };
 		(InternetAccessPoint IAP, IAPChannel Channel) result;

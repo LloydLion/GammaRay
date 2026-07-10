@@ -4,5 +4,5 @@ namespace GammaRay.Core.Services.Probing;
 
 public interface IProbingManager
 {
-	public void StartProbing(Service service, IReadOnlyCollection<InternetAccessPoint> pointsToProbeVia, IServiceStatusTableRepository routeOutput);
+	public void StartProbingIfNeed(Service service, IReadOnlyCollection<InternetAccessPoint> pointsToProbeVia, IServiceStatusTableRepository routeOutput);
 }

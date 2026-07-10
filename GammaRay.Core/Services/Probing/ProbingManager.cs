@@ -6,7 +6,6 @@ using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Network.Profiles;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
-using System.Threading.Channels;
 using static GammaRay.Core.Services.Probing.ProbeResult;
 
 namespace GammaRay.Core.Services.Probing;
@@ -25,21 +24,41 @@ public sealed class ProbingManager(
 	IOptions<ProbingManager.Options> options
 ) : IProbingManager
 {
-	private readonly HashSet<ProbingTask> _tasks = [];
+	private readonly Dictionary<Service, ProbingTask> _tasks = [];
 	private readonly Options _options = options.Value;
 
 
-	public void StartProbing(Service service, IReadOnlyCollection<InternetAccessPoint> pointsToProbeVia, IServiceStatusTableRepository routeOutput)
+	public void StartProbingIfNeed(Service service, IReadOnlyCollection<InternetAccessPoint> pointsToProbeVia, IServiceStatusTableRepository routeOutput)
 	{
-		if (_tasks.Any(s => s.Service == service) == false)
+		if (_tasks.ContainsKey(service))
+			return;
+
+		var now = _time.GetUtcNow().UtcDateTime;
+
+		var STD = routeOutput.TryGetTable(service);
+		if (STD.HasValue == false || STD.Value.IsValid(now) == false)
+			goto doProbe;
+
+		var statusTable = STD.Value.Value.Table;
+
+		foreach (var IAP in pointsToProbeVia)
 		{
-			var probingTask = new ProbingTask(service);
+			if (statusTable.ContainsKey(IAP))
+				continue;
 
-			var task = StartProbingTask(service, pointsToProbeVia, routeOutput, () => _tasks.Remove(probingTask));
-			probingTask.SetTask(task);
-
-			_tasks.Add(probingTask);
+			if (GetAvailableChannel(IAP).HasValue)
+				goto doProbe;
 		}
+
+		return;
+
+	doProbe:
+		var probingTask = new ProbingTask(service);
+
+		var task = StartProbingTask(service, pointsToProbeVia, routeOutput, () => _tasks.Remove(service));
+		probingTask.SetTask(task);
+
+		_tasks.Add(service, probingTask);
 	}
 
 	private async Task StartProbingTask(Service service, IReadOnlyCollection<InternetAccessPoint> pointsToProbeVia, IServiceStatusTableRepository routeOutput, Action callback)
