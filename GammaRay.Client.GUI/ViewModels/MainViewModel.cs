@@ -206,7 +206,11 @@ public sealed class ServerStateObserver(
 			try
 			{
 				var statuses = await _client.QueryChannelStatuses(new IAPChannelFilter());
-				var convertedStatuses = statuses.Select(s => new IAPChannelStatusViewModel($"{s.IAP}/{s.Channel}", s.Network, s.CharacteristicAccessTime.ToTimeSpan(), s.IsAvailable));
+				var convertedStatuses = statuses.Select(s =>
+				{
+					var CAT = s.CharacteristicAccessTime.Seconds > 100000 ? TimeSpan.Zero : s.CharacteristicAccessTime.ToTimeSpan();
+					return new IAPChannelStatusViewModel($"{s.IAP}/{s.Channel}", s.Network, CAT, s.IsAvailable);
+				});
 				_statusesOutput.Clear();
 				_statusesOutput.AddRange(convertedStatuses);
 
