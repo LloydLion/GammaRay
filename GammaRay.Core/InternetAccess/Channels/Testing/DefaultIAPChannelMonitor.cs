@@ -160,16 +160,28 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 
 		public void Update()
 		{
+			// Update skip logic:
+			// WAQ is not full? -> no skips
+			// Not available? -> update once per UnavailableChannelUpdatePeriodMultiplier
+			// Available but not privileged by monitor? -> update once per UnprivilegedChannelUpdatePeriodMultiplier
+			// Available and privileged -> no skips
+			//
+			// If previous update is still running update will be skipped without compensation
+			//
+
 			_skippedUpdatesCounter++;
-			if (_available == false)
+			if (WAQ.Buffer.IsFull)
 			{
-				if (_skippedUpdatesCounter < _owner._options.UnavailableChannelUpdatePeriodMultiplier)
-					return;
-			}
-			if (_privileged == false)
-			{
-				if (_skippedUpdatesCounter < _owner._options.UnprivilegedChannelUpdatePeriodMultiplier)
-					return;
+				if (_available == false)
+				{
+					if (_skippedUpdatesCounter < _owner._options.UnavailableChannelUpdatePeriodMultiplier)
+						return;
+				}
+				if (_privileged == false)
+				{
+					if (_skippedUpdatesCounter < _owner._options.UnprivilegedChannelUpdatePeriodMultiplier)
+						return;
+				}
 			}
 
 			_skippedUpdatesCounter = 0;
