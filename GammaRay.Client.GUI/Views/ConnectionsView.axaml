@@ -12,8 +12,9 @@
 		
 	<DataGrid ItemsSource="{Binding Connections}" RowHeight="20">
 		<DataGrid.Columns>
+			<DataGridTextColumn Header="Status" Binding="{Binding Status}"/>
 			<DataGridTextColumn Header="Inbound" Binding="{Binding Inbound}"/>
-			<DataGridTextColumn Header="Source" Binding="{Binding EndPoint}"/>
+			<DataGridTextColumn Header="Source" Binding="{Binding Source}"/>
 			<DataGridTextColumn Header="Destination" Binding="{Binding Destination}"/>
 			<DataGridTextColumn Header="Routing decision" Binding="{Binding RoutingResult}"/>
 		</DataGrid.Columns>

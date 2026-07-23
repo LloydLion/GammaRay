@@ -15,19 +15,22 @@ public interface IDataFlow : IReadOnlyDataFlow
 
 static class DataFlowExtensions
 {
-	extension(IDataFlow flow)
+	extension(IDataFlow flowA)
 	{
-		public Task JoinAsync(IDataFlow other) => flow.JoinAsync(other, new byte[ushort.MaxValue], new byte[ushort.MaxValue]);
+		public FlowJoinTask JoinAsync(IDataFlow other, IFlowJoinObserver? observer = null) => flowA.JoinAsync(other, new byte[ushort.MaxValue], new byte[ushort.MaxValue], observer);
 
-		public async Task JoinAsync(IDataFlow other, Memory<byte> buffer1, Memory<byte> buffer2)
+		public FlowJoinTask JoinAsync(IDataFlow flowB, Memory<byte> bufferAToB, Memory<byte> bufferBToA, IFlowJoinObserver? observer = null) =>
+			new (flowA.JoinInternalAsync(flowB, new byte[ushort.MaxValue], new byte[ushort.MaxValue], observer),
+				flowA, flowB, bufferAToB, bufferBToA, observer);
+
+		private async Task JoinInternalAsync(IDataFlow flowB, Memory<byte> bufferAToB, Memory<byte> bufferBToA, IFlowJoinObserver? observer = null)
 		{
-			if (buffer1.Length is not ushort.MaxValue || buffer2.Length is not ushort.MaxValue)
+			if (bufferAToB.Length is not ushort.MaxValue || bufferBToA.Length is not ushort.MaxValue)
 				throw new ArgumentException($"Length of each memory must be {ushort.MaxValue}(aka ushort.MaxValue, maximum size of IP packet)");
 
 			Func<IDataFlow, Memory<byte>, CancellationToken, ValueTask<int>> readDelegate, writeDelegate;
 
-
-			switch ((other, flow))
+			switch ((flowB, flowA))
 			{
 				case (IStreamDataFlow, IStreamDataFlow):
 					readDelegate = static (flow, buffer, cancel) => ((IStreamDataFlow)flow).ReadAsync(buffer, new() { Timeout = Timeout.InfiniteTimeSpan }, cancel);
@@ -47,18 +50,20 @@ static class DataFlowExtensions
 
 			var cts = new CancellationTokenSource();
 
-			var task1to2 = pipeFlows(buffer1, readDelegate, writeDelegate, flow, other, cts.Token);
-			var task2to1 = pipeFlows(buffer2, readDelegate, writeDelegate, other, flow, cts.Token);
+			var taskAToB = pipeFlows(bufferAToB, observer, direction: true, readDelegate, writeDelegate, flowA, flowB, cts.Token);
+			var taskBToA = pipeFlows(bufferBToA, observer, direction: false, readDelegate, writeDelegate, flowB, flowA, cts.Token);
 
-			var completedTask = await Task.WhenAny(task1to2, task2to1);
+			var completedTask = await Task.WhenAny(taskAToB, taskBToA);
 			cts.Cancel();
 
-			if (completedTask == task1to2) await task2to1;
-			else await task1to2;
+			if (completedTask == taskAToB) await taskBToA;
+			else await taskAToB;
+
+			observer?.NotifyEndOfJoin();
 
 
 			static async Task pipeFlows(
-				Memory<byte> buffer,
+				Memory<byte> buffer, IFlowJoinObserver? observer, bool direction,
 				Func<IDataFlow, Memory<byte>, CancellationToken, ValueTask<int>> readDelegate,
 				Func<IDataFlow, Memory<byte>, CancellationToken, ValueTask<int>> writeDelegate,
 				IDataFlow transmitter, IDataFlow receiver, CancellationToken cancellation)
@@ -74,8 +79,17 @@ static class DataFlowExtensions
 					if (received == 0)
 						break;
 
+					var workBuffer = buffer[..received];
+
+					if (observer is not null)
+					{
+						if (direction)
+							observer.NotifyDataFromAToB(workBuffer);
+						else observer.NotifyDataFromBToA(workBuffer);
+					}
+
 					try
-					{ await writeDelegate(receiver, buffer[..received], cancellation); }
+					{ await writeDelegate(receiver, workBuffer, cancellation); }
 					catch (Exception) { break; }
 				}
 			}

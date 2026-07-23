@@ -1,8 +1,9 @@
 using GammaRay.Core;
 using GammaRay.Core.API;
 using GammaRay.Core.API.Services;
+using GammaRay.Core.Connection;
+using GammaRay.Core.Connection.Inbound;
 using GammaRay.Core.Host;
-using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.InternetAccess.Channels.Drivers;
@@ -78,7 +79,8 @@ internal class Program
 				.AddSingleton<IIAPChannelMonitor, DefaultIAPChannelMonitor>()
 				.AddSingleton<IIAPChannelSimpleTester, IAPChannelSimpleTester>()
 
-				.AddSingleton<SmartRouter>()
+				.AddSingleton<IRouter, SmartRouter>()
+				.AddSingleton<IMasterServer, MasterServer>()
 
 #if DEBUG
 				.AddSingleton<IMonitoringProvider, ConsoleMonitoringProvider>()
@@ -110,13 +112,20 @@ internal class Program
 
 			((DefaultIAPChannelMonitor)sp.GetRequiredService<IIAPChannelMonitor>()).StartMonitoring();
 
+			var inboundDriverRegistry = sp.GetRequiredService<IDriverRegistry<IInboundDriver>>();
 			var inbounds = sp.GetRequiredService<InboundConfigurationProvider>()
-				.PlainInboundConfigurations
-				.Select(c => sp.GetRequiredService<IDriverRegistry<IInboundDriver>>().CreateInboundFromConfiguration(c))
+				.InboundConfigurations
+				.Select(kv =>
+				{
+					var config = kv.Value;
+					var driver = inboundDriverRegistry.ProvideDriver(config.Protocol);
+					var inbound = driver.CreateInbound(config.EndPoint);
+					return new NamedInbound(inbound, driver, kv.Key, config.Protocol);
+				})
 				.ToArray();
 
-			var masterServer = new MasterServer(inbounds, sp.GetRequiredService<SmartRouter>(), sp.GetRequiredService<IDriverRegistry<IChannelDriver>>());
-			var masterServerTask = masterServer.Run(cancel);
+			var masterServer = sp.GetRequiredService<IMasterServer>();
+			var masterServerTask = masterServer.Run(inbounds, cancel);
 
 			var apiServer = sp.GetRequiredService<APIServer>();
 			var apiServerTask = apiServer.Run(cancel);

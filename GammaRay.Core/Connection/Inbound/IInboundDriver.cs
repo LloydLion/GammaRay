@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace GammaRay.Core.Inbound;
+namespace GammaRay.Core.Connection.Inbound;
 
 public interface IInboundDriver
 {

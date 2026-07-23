@@ -1,28 +1,24 @@
-using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow;
 using GammaRay.Core.Network.Flow.Implementation;
 using GammaRay.Core.Protocols.HTTP;
 using GammaRay.Core.Utils;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using HttpRequestHeader = GammaRay.Core.Protocols.HTTP.HttpRequestHeader;
 using HttpResponseHeader = GammaRay.Core.Protocols.HTTP.HttpResponseHeader;
 
-namespace GammaRay.Core.Inbound;
+namespace GammaRay.Core.Connection.Inbound;
 
 [RecommendedDriverName("http")]
 public sealed class HTTPInboundDriver(
-	TimeProvider _time,
-	MonitoringSystem _monitoringSystem,
 	IOptions<HTTPInboundDriver.Options> options
 ) : IInboundDriver
 {
 	private readonly Options _options = options.Value;
-	private readonly TimeProvider _time = _time;
-	private readonly MonitoringSystem _monitoringSystem = _monitoringSystem;
 
 
 	public IInbound CreateInbound(IPEndPoint localEndPoint)
@@ -49,15 +45,18 @@ public sealed class HTTPInboundDriver(
 
 		private readonly IPEndPoint _localEndPoint = localEndPoint;
 		private readonly HTTPInboundDriver _owner = owner;
-		private IncomingRequestCallback? _requestCallback;
+		private IMasterServerInboundAgent? _master;
 
 
-		public void OnNewRequest(IncomingRequestCallback callback) => _requestCallback = callback;
+		public void SetMaster(IMasterServerInboundAgent master)
+		{
+			_master = master;
+		}
 
 		public async Task Run(CancellationToken stopToken = default)
 		{
-			if (_requestCallback is null)
-				throw new InvalidOperationException($"Request callback is required. Set it using {nameof(OnNewRequest)}");
+			if (_master is null)
+				throw new InvalidOperationException("Set master first");
 
 			var socket = CreateSocket();
 			socket.Listen();
@@ -89,14 +88,13 @@ public sealed class HTTPInboundDriver(
 
 		private async Task HandleClient(ProxyClientContext clientContext)
 		{
-			await Task.Yield();
+			Debug.Assert(_master is not null);
 
-			var now = _owner._time.GetUtcNow().UtcDateTime;
-			using var procedure = TrackableProcedure.New("Connection", now, _owner._monitoringSystem);
+			await Task.Yield();
 
 			try
 			{
-				bool shouldKeepConnection;
+				bool shouldKeepConnection = false;
 				do
 				{
 					// -- Wait for new Data
@@ -105,11 +103,11 @@ public sealed class HTTPInboundDriver(
 						return;
 
 					// -- Prepare to processing
-					RequestContext requestContext;
+					var connection = _master.CreateBlankConnection((IPEndPoint)clientContext.Socket.RemoteEndPoint!);
+					ClientConnectionRequest request;
 
-					using (var report = new Report(procedure))
+					try
 					{
-						report.RemoteEndPoint = (IPEndPoint)clientContext.Socket.RemoteEndPoint!;
 
 						// -- Read HTTP header for proxy
 						var rawHeader = await HttpMessageHeader.ReadRawHeaderAsync(clientContext.Socket);
@@ -119,40 +117,35 @@ public sealed class HTTPInboundDriver(
 						var destinationEndPoint = header.Uri.EndPoint;
 						destinationEndPoint ??= GenericWebEndPoint.Parse(header.Headers.TryGetSingle("Host")
 							?? throw new Exception("Client do not specified destination host"));
-						report.DestinationEndPoint = destinationEndPoint.Value;
 
-						// -- Create request context
+						// -- Create request
 						var requestType = header.Method == "CONNECT" ? HttpProxyRequestType.Connect : HttpProxyRequestType.HTTP;
-						requestContext = new RequestContext(
-							new WebEndPoint(destinationEndPoint.Value, TransportType.StreamBased),
-							FormIncomingDataFlow(clientContext, header, destinationEndPoint.Value, requestType),
-							now, procedure
-						);
+						var incomingDataFlow = FormIncomingDataFlow(clientContext, header, destinationEndPoint.Value, requestType);
+						var clientIncomingConnection = new SocketBasedIncomingConnection(clientContext.Socket, incomingDataFlow);
+						request = new ClientConnectionRequest(new WebEndPoint(destinationEndPoint.Value, TransportType.StreamBased), clientIncomingConnection);
 
 						// -- Write response
 						await clientContext.Stream.WriteAsync(ConnectionEstablishedMessage);
 
 						// -- Make connection decision
-						shouldKeepConnection = false;
 						var connectionHeaderValue = header.Headers.TryGetSingle(ProxyConnectionHeader);
-						if (string.Equals(connectionHeaderValue, "keep-alive", StringComparison.OrdinalIgnoreCase))
-						{
-							shouldKeepConnection = true;
-						}
-						report.ShouldKeepConnectionAlive = shouldKeepConnection;
-					}
+						shouldKeepConnection = string.Equals(connectionHeaderValue, "keep-alive", StringComparison.OrdinalIgnoreCase);
 
-					// -- Call callback
-					await CallCallback(requestContext);
+						await _master.HandleRequest(connection, request);
+					}
+					catch (Exception ex)
+					{
+						_master.HandleFatalError(connection, ex);
+						return;
+					}
 				}
 				while (shouldKeepConnection);
 			}
-			catch (Exception ex)
-			{
-				procedure.SetFatalException(ex);
-			}
+			catch { }
 			finally
 			{
+				try { await clientContext.Socket.DisconnectAsync(false); }
+				catch { }
 				clientContext.Dispose();
 			}
 		}
@@ -205,20 +198,5 @@ public sealed class HTTPInboundDriver(
 			clientContext.Stream.WriteTimeout = clientContext.Stream.ReadTimeout = _owner._options.MasterClientTimeout.TotalMillisecondsInt;
 			return clientContext;
 		}
-
-		private ValueTask CallCallback(RequestContext requestContext) => _requestCallback!.Invoke(this, requestContext);
-
-	}
-
-	[SystemReportMetadata(nameof(IInboundDriver), nameof(HTTPInboundDriver), "HandleRequest")]
-	public class Report(TrackableProcedure? autoBind = null) : SystemReport(autoBind)
-	{
-		public ReportProperty<IPEndPoint> RemoteEndPoint { get; set; }
-
-		public ReportProperty<GenericWebEndPoint> DestinationEndPoint { get; set; }
-
-		public ReportProperty<bool> ShouldKeepConnectionAlive { get; set; }
-
-		public ReportProperty<string> UserAgent { get; set; }
 	}
 }

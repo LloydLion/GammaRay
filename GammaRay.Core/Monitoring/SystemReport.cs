@@ -110,7 +110,9 @@ public abstract class SystemReport : IDisposable
 
 
 		var constructor = reportType.GetConstructors().OrderBy(s => s.GetParameters().Length).First(s => s.GetParameters().All(p => p.HasDefaultValue));
-		var constructorCallParameters = constructor.GetParameters().Select(p => Expression.Constant(p.DefaultValue, p.ParameterType)).ToArray();
+		var constructorCallParameters = constructor.GetParameters().Select(p =>
+			Expression.Constant(p.ParameterType.IsValueType && p.DefaultValue is null ? Activator.CreateInstance(p.ParameterType) : p.DefaultValue, p.ParameterType)
+		).ToArray();
 		var factoryExpression = Expression.New(constructor, constructorCallParameters);
 		var factoryMethod = Expression.Lambda<Func<SystemReport>>(factoryExpression, []).Compile();
 

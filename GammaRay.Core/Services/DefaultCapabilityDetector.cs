@@ -1,4 +1,4 @@
-using GammaRay.Core.Inbound;
+using GammaRay.Core.Routing;
 
 namespace GammaRay.Core.Services;
 
@@ -13,7 +13,7 @@ public sealed class DefaultCapabilityDetector : ICapabilityDetector
 	}
 
 
-	public Capability Detect(RequestContext request)
+	public Capability Detect(RoutingRequest request)
 	{
 		CapabilityClass? firstMatchedClass = null;
 		foreach (var capabilityClass in _capabilityClasses.PlainCapabilityClasses)
@@ -37,6 +37,6 @@ public sealed class DefaultCapabilityDetector : ICapabilityDetector
 		return capability;
 	}
 
-	private static bool PerformBasicRuleCheck(RequestContext request, CapabilityDetectionRule rule) =>
-		rule.Transport.IsMatch(request.TargetEndPoint.Protocol) && rule.Port.IsMatch(request.TargetEndPoint.Port);
+	private static bool PerformBasicRuleCheck(RoutingRequest request, CapabilityDetectionRule rule) =>
+		rule.Transport.IsMatch(request.Destination.Protocol) && rule.Port.IsMatch(request.Destination.Port);
 }

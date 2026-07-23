@@ -1,5 +1,4 @@
 using Avalonia.Controls;
-using GammaRay.Core.Network;
 using System.Collections.ObjectModel;
 using System.Net;
 
@@ -14,27 +13,21 @@ public class ConnectionsViewModel : ViewModelBase
 			Connections = [
 				new OnlineConnectionViewModel(
 					"in-http",
-					"HTTP",
 					new IPEndPoint(IPAddress.Parse("127.0.0.1"), 2313),
-					new WebEndPoint(new WebHost("youtube.com"), 443, TransportType.StreamBased),
 					Guid.Empty
-				) { RoutingResult = "finlandProxy/vless" },
+				) { RoutingResult = "finlandProxy/vless", Status = "Established", Destination = "youtube.com:443" },
 
 				new OnlineConnectionViewModel(
 					"in-http",
-					"HTTP",
 					new IPEndPoint(IPAddress.Parse("127.0.0.1"), 4121),
-					new WebEndPoint(new WebHost("yandex.ru"), 443, TransportType.StreamBased),
 					Guid.Empty
-				) { RoutingResult = "local-default/local" },
+				) { RoutingResult = "local-default/local", Status = "Established", Destination = "yandex.ru:443" },
 
 				new OnlineConnectionViewModel(
 					"in-http",
-					"HTTP",
 					new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5331),
-					new WebEndPoint(new WebHost("instagram.com"), 443, TransportType.StreamBased),
 					Guid.Empty
-				) { RoutingResult = "finlandProxy/shadowsocks" }
+				) { RoutingResult = "finlandProxy/shadowsocks", Status = "Established", Destination = "instagram.com:443" }
 			];
 		}
 	}

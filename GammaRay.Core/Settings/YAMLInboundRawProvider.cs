@@ -1,4 +1,4 @@
-using GammaRay.Core.Inbound;
+using GammaRay.Core.Connection.Inbound;
 using System.Net;
 using YamlDotNet.RepresentationModel;
 

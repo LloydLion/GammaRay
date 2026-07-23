@@ -1,6 +1,6 @@
 using GammaRay.Core.Settings;
 
-namespace GammaRay.Core.Inbound;
+namespace GammaRay.Core.Connection.Inbound;
 
 public sealed class InboundConfigurationProvider
 {

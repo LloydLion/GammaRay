@@ -1,8 +1,8 @@
-using GammaRay.Core.Inbound;
+using GammaRay.Core.Routing;
 
 namespace GammaRay.Core.Services;
 
 public interface ICapabilityDetector
 {
-	public Capability Detect(RequestContext request);
+	public Capability Detect(RoutingRequest request);
 }

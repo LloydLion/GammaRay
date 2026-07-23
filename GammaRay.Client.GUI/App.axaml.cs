@@ -4,7 +4,8 @@ using Avalonia.Markup.Xaml;
 using GammaRay.Client.GUI.ViewModels;
 using GammaRay.Client.GUI.Views;
 using GammaRay.Core.API.Client;
-using GammaRay.Core.Inbound;
+using GammaRay.Core.Connection;
+using GammaRay.Core.Connection.Inbound;
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Routing;
@@ -64,36 +65,71 @@ public class MonitoringConnectionTracker(ICollection<OnlineConnectionViewModel> 
 
 		switch (newReport)
 		{
-			case HTTPInboundDriver.Report httpReport:
+			case MasterServer.NewConnectionReport newConnectionReport:
 				{
-					if (httpReport.RemoteEndPoint.IsSet == false || httpReport.DestinationEndPoint.IsSet == false)
+					if (newConnectionReport.RemoteEndPoint.IsSet == false || newConnectionReport.Inbound.IsSet == false)
 						return;
 
-					var newConnection = new OnlineConnectionViewModel("unk", "HTTP", httpReport.RemoteEndPoint.Value, new WebEndPoint(httpReport.DestinationEndPoint.Value, TransportType.StreamBased), procedure.Id);
+					var newConnection = new OnlineConnectionViewModel(newConnectionReport.Inbound.Value, newConnectionReport.RemoteEndPoint.Value, procedure.Id);
 					output.Add(newConnection);
 					break;
 				}
 
-			case SOCKS5InboundDriver.Report socksReport:
+			case MasterServer.ConnectionRequestReport connectionRequestedReport:
 				{
-					if (socksReport.RemoteEndPoint.IsSet == false || socksReport.DestinationEndPoint.IsSet == false)
+					if (connectionRequestedReport.DestinationEndPoint.IsSet == false)
 						return;
 
-					var newConnection = new OnlineConnectionViewModel("unk", "SOCKS5", socksReport.RemoteEndPoint.Value, socksReport.DestinationEndPoint.Value, procedure.Id);
-					output.Add(newConnection);
-					break;
-				}
-
-			case SmartRouter.Report smartRouterReport:
-				{
-					if (smartRouterReport.ResultIAP.IsSet == false || smartRouterReport.ResultChannelName.IsSet == false)
-						return;
-
-					var connection = output.FirstOrDefault(c => c.Id == smartRouterReport.Procedure.Id);
+					var connection = output.FirstOrDefault(c => c.Id == connectionRequestedReport.Procedure.Id);
 					if (connection is null)
 						return;
 
-					connection.RoutingResult = $"{smartRouterReport.ResultIAP.Value}/{smartRouterReport.ResultChannelName.Value}";
+					var destination = connectionRequestedReport.DestinationEndPoint.Value;
+					connection.Destination = $"{destination.Host}:{destination.Port}";
+					connection.Status = "Routed";
+					break;
+				}
+
+			case MasterServer.ConnectionRoutedReport routedReport:
+				{
+					if (routedReport.RoutingResult.IsSet == false)
+						return;
+					var connection = output.FirstOrDefault(c => c.Id == routedReport.Procedure.Id);
+					if (connection is null)
+						return;
+					var routingResult = routedReport.RoutingResult.Value;
+					connection.RoutingResult = $"{routingResult.IAP.Name}/{routingResult.ChannelName}";
+					break;
+				}
+
+			case MasterServer.ConnectionEstablishedReport establishedReport:
+				{
+					var connection = output.FirstOrDefault(c => c.Id == establishedReport.Procedure.Id);
+					if (connection is null)
+						return;
+
+					connection.Status = "Established";
+					break;
+				}
+
+			case MasterServer.ConnectionStaleReport staleReport:
+				{
+					if (staleReport.IsStale.IsSet == false)
+						return;
+					var connection = output.FirstOrDefault(c => c.Id == staleReport.Procedure.Id);
+					if (connection is null)
+						return;
+					connection.Status = staleReport.IsStale.Value ? "Stale" : "Established";
+					break;
+				}
+
+			case MasterServer.ConnectionReroutedReport reroutedReport:
+				{
+					var connection = output.FirstOrDefault(c => c.Id == reroutedReport.Procedure.Id);
+					if (connection is null)
+						return;
+					var routingResult = reroutedReport.ReroutingResult.Value;
+					connection.RoutingResult = $"[R] {routingResult.IAP.Name}/{routingResult.ChannelName}";
 					break;
 				}
 		}

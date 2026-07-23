@@ -227,6 +227,8 @@ public sealed class ServerStateObserver(
 							? Math.Min(s.ServiceDecayTime.ToDateTime(), s.StatusTableDecayTime.ToDateTime())
 							: s.ServiceDecayTime.ToDateTime()
 					) - now;
+					
+					remainingTime = Math.Max(remainingTime, TimeSpan.Zero);
 
 					return new FullServiceInfoViewModel(new GenericWebEndPoint(new(s.HostName), s.Port), s.CapabilityClass, table, remainingTime);
 				});

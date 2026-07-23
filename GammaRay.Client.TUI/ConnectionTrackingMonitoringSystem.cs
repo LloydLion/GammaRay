@@ -1,4 +1,4 @@
-using GammaRay.Core.Inbound;
+using GammaRay.Core.Connection.Inbound;
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Routing;

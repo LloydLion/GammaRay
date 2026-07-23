@@ -1,4 +1,3 @@
-using GammaRay.Core.Inbound;
 using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.Monitoring;
@@ -29,24 +28,24 @@ public sealed class SmartRouter(
 	IIAPChannelPicker _channelPicker
 ) : IRouter
 {
-	public IAPChannel MakeRoutingDecision(RequestContext context)
+	public NamedIAPChannel MakeRoutingDecision(RoutingRequest request)
 	{
 		var networkIdentity = _networkIdentifier.CurrentIdentity;
 		var networkProfile = _networkProfileRepository.GetProfileForOrNull(networkIdentity) ?? throw new Exception("No internet connection detected");
 
-		var endPointCategory = _endpointCategorizer.Categorize(context.TargetEndPoint);
+		var endPointCategory = _endpointCategorizer.Categorize(request.Destination);
 
 		var routingContext = new RoutingContext(endPointCategory, networkProfile);
 		var routingConfiguration = _routingRulesProvider.Route(routingContext) ?? throw new Exception($"Invalid settings: no route for {routingContext}");
 		var IAPChain = routingConfiguration.GetExtendedIAPChain(_internetAccessPointProvider);
 
 
-		var serviceDecay = _serviceRepository.TryGetService(context.TargetEndPoint);
+		var serviceDecay = _serviceRepository.TryGetService(request.Destination);
 		Service service;
-		if (serviceDecay is null || serviceDecay.Value.ValidUntil <= context.InitialTime)
+		if (serviceDecay is null || serviceDecay.Value.ValidUntil <= request.TrackableProcedure.CreationTime)
 		{
-			var capability = _capabilityDetector.Detect(context);
-			service = new Service(context.TargetEndPoint, capability);
+			var capability = _capabilityDetector.Detect(request);
+			service = new Service(request.Destination, capability);
 			_serviceRepository.RegisterService(service);
 		}
 		else service = serviceDecay.Value.Value;
@@ -57,7 +56,7 @@ public sealed class SmartRouter(
 		var statusTableDec = _routeRepository.TryGetTable(service);
 
 		var channelRequirements = new IAPChannelRequirements() { RequiredTags = routingConfiguration.RequiredTags };
-		(InternetAccessPoint IAP, IAPChannel Channel) result;
+		NamedIAPChannel result;
 
 		if (statusTableDec is not null)
 		{
@@ -65,7 +64,7 @@ public sealed class SmartRouter(
 			var acceptableStatusType = table.CalculateAcceptableStatusType();
 			foreach (var blob in IAPChain.Blobs)
 			{
-				(InternetAccessPoint, IAPChannel)? bestChannel = null;
+				NamedIAPChannel? bestChannel = null;
 				var bestMetric = TimeSpan.MaxValue;
 				foreach (var IAP in blob.Points)
 				{
@@ -82,7 +81,7 @@ public sealed class SmartRouter(
 					if (totalMetric < bestMetric)
 					{
 						bestMetric = totalMetric;
-						bestChannel = (IAP, channel);
+						bestChannel = NamedIAPChannel.CreateUsingInverseTable(IAP, channel);
 					}
 				}
 
@@ -97,20 +96,21 @@ public sealed class SmartRouter(
 		{
 			var status = _channelPicker.PickBestChannel(IAP, networkProfile, channelRequirements);
 			if (status is not null and { Status.IsAvailable: true })
-				{ result = (IAP, status.Value.Channel); goto returnResult; }
+				{ result = NamedIAPChannel.CreateUsingInverseTable(IAP, status.Value.Channel); goto returnResult; }
 		}
 
 		throw new Exception("Good game, well played, there is just no way to route this shit");
 
 	returnResult:
-		CommitReport(result, context, networkProfile, endPointCategory, routingConfiguration, service, statusTableDec);
+		CommitReport(result, request, networkProfile, endPointCategory, routingConfiguration, service, statusTableDec);
 
-		return result.Channel;
+		return result;
 	}
 
 
-	private void CommitReport((InternetAccessPoint IAP, IAPChannel Channel) result,
-		RequestContext context,
+	private static void CommitReport(
+		NamedIAPChannel result,
+		RoutingRequest request,
 		NetworkProfile profile,
 		EndPointCategory endPointCategory,
 		EndPointRoutingConfiguration routingConfiguration,
@@ -129,7 +129,7 @@ public sealed class SmartRouter(
 			StatusTable = statusTable?.Value
 		};
 
-		context.TrackableProcedure.CommitReport(report);
+		request.TrackableProcedure.CommitReport(report);
 	}
 
 

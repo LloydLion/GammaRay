@@ -1,20 +1,19 @@
-using GammaRay.Core.Network;
 using ReactiveUI;
 using System.Net;
 
 namespace GammaRay.Client.GUI.ViewModels;
 
-public sealed class OnlineConnectionViewModel(string inbound, string inboundDriver, IPEndPoint endPoint, WebEndPoint destination, Guid id) : ViewModelBase
+public sealed class OnlineConnectionViewModel(string inbound, IPEndPoint source, Guid id) : ViewModelBase
 {
-	public string InboundDriver { get; } = inboundDriver;
-
 	public string Inbound { get; } = inbound;
 
-	public IPEndPoint EndPoint { get; } = endPoint;
+	public IPEndPoint Source { get; } = source;
 
-	public string Destination { get; } = $"{destination.Host}:{destination.Port}";
+	public string? Destination { get; set => this.RaiseAndSetIfChanged(ref field, value); }
 
-	public string? RoutingResult { get; set => this.RaiseAndSetIfChanged(ref field, value); } 
+	public string? RoutingResult { get; set => this.RaiseAndSetIfChanged(ref field, value); }
+
+	public string Status { get; set => this.RaiseAndSetIfChanged(ref field, value); } = "Blank";
 
 	public Guid Id { get; } = id;
 }

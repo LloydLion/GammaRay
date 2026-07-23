@@ -1,6 +1,6 @@
-global using IInboundDriverRegistry = GammaRay.Core.Utils.IDriverRegistry<GammaRay.Core.Inbound.IInboundDriver>;
+global using IInboundDriverRegistry = GammaRay.Core.Utils.IDriverRegistry<GammaRay.Core.Connection.Inbound.IInboundDriver>;
 
-namespace GammaRay.Core.Inbound;
+namespace GammaRay.Core.Connection.Inbound;
 
 public static class InboundDriverRegistryExtensions
 {
