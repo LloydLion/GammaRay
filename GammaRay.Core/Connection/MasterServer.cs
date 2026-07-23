@@ -5,6 +5,7 @@ using GammaRay.Core.Monitoring;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow;
 using GammaRay.Core.Routing;
+using GammaRay.Core.Utils;
 using System.Buffers;
 using System.Net;
 
@@ -133,7 +134,13 @@ public sealed class MasterServer(
 		{
 			var now = _owner._time.GetUtcNow().UtcDateTime;
 			var connection = new ClientConnection(new(remoteEndPoint, _inbound), _owner._monitoringSystem, Guid.NewGuid(), now);
-			connection.Procedure.CommitReport(new NewConnectionReport(remoteEndPoint, _inbound.Name));
+
+			var report = new NewConnectionReport(remoteEndPoint, _inbound.Name);
+		#if ENABLE_PID_GATHER
+			report.PID = TcpProcessLookup.GetProcessIdByLocalPort(remoteEndPoint.Port);
+		#endif
+			connection.Procedure.CommitReport(report);
+
 			_owner._connections.Add(connection.Id, connection);
 			return connection;
 		}
@@ -211,6 +218,10 @@ public sealed class MasterServer(
 		public ReportProperty<IPEndPoint> RemoteEndPoint { get; set; } = remoteEndPoint;
 
 		public ReportProperty<string> Inbound { get; set; } = inbound;
+
+	#if ENABLE_PID_GATHER
+		public ReportProperty<int> PID { get; set; }
+	#endif
 	}
 
 	[SystemReportMetadata(nameof(IMasterServer), nameof(MasterServer), "ConnectionRequest")]

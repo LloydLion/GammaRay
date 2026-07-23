@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants Condition="'$(Configuration)'=='DEBUG'">$(DefineConstants);ENABLE_PID_GATHER</DefineConstants>
   </PropertyGroup>
   
   <ItemGroup>
