@@ -64,7 +64,7 @@ internal class Program
 				.AddSingleton<IDriverRegistry<IProbeDriver>, ReflectionBasedDriverRegistry<IProbeDriver>>()
 
 #if UseWindowsComponents
-				.AddSingleton<INetworkIdentifier, GammaRay.Core.Windows.Management.PowerShellHost>()
+				.AddSingleton<GammaRay.Core.Windows.Management.PowerShellHost>()
 				.AddSingleton<INetworkIdentifier, GammaRay.Core.Windows.Network.Identity.WindowsNetProfileBasedNetworkIdentifier>()
 #else
 				.AddSingleton<INetworkIdentifier, InterfaceBasedNetworkIdentifier>()
