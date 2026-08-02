@@ -4,7 +4,9 @@ public sealed class IAPChannelStatusViewModel(
 	string channel,
 	string network,
 	TimeSpan characteristicAccessTime,
-	bool isAvailable
+	TimeSpan averageAccessTime,
+	bool isAvailable,
+	TimeSpan averageLifeTime
 )
 {
 	public string Channel { get; } = channel;
@@ -13,5 +15,9 @@ public sealed class IAPChannelStatusViewModel(
 
 	public TimeSpan CharacteristicAccessTime { get; } = characteristicAccessTime;
 
+	public TimeSpan AverageAccessTime { get; } = averageAccessTime;
+
 	public bool IsAvailable { get; } = isAvailable;
+
+	public TimeSpan AverageLifeTime { get; } = averageLifeTime;
 }

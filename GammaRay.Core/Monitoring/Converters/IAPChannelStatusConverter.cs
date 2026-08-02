@@ -13,6 +13,7 @@ public sealed class IAPChannelStatusConverter : JsonConverter<IAPChannelStatus>
 
 		TimeSpan? averageAccessTime = null;
 		TimeSpan? characteristicAccessTime = null;
+		TimeSpan? averageLifeTime = null;
 		double? accessChance = null;
 		bool? isAvailable = null;
 
@@ -38,14 +39,17 @@ public sealed class IAPChannelStatusConverter : JsonConverter<IAPChannelStatus>
 					case "isAvailable":
 						isAvailable = reader.GetBoolean();
 						break;
+					case "averageLifeTime":
+						averageLifeTime = TimeSpan.FromTicks(reader.GetInt64());
+						break;
 				}
 			}
 		}
 
-		if (averageAccessTime is null || characteristicAccessTime is null || accessChance is null || isAvailable is null)
+		if (averageAccessTime is null || characteristicAccessTime is null || accessChance is null || isAvailable is null || averageLifeTime is null)
 			throw new JsonException("Missing required properties for IAPChannelStatus");
 
-		return new IAPChannelStatus(characteristicAccessTime.Value, averageAccessTime.Value, accessChance.Value, isAvailable.Value);
+		return new IAPChannelStatus(characteristicAccessTime.Value, averageAccessTime.Value, accessChance.Value, isAvailable.Value, averageLifeTime.Value);
 	}
 
 	public override void Write(Utf8JsonWriter writer, IAPChannelStatus value, JsonSerializerOptions options)
@@ -62,6 +66,10 @@ public sealed class IAPChannelStatusConverter : JsonConverter<IAPChannelStatus>
 
 		writer.WritePropertyName("isAvailable");
 		writer.WriteBooleanValue(value.IsAvailable);
+
+		writer.WritePropertyName("averageLifeTime");
+		writer.WriteNumberValue(value.AverageLifeTime.Ticks);
+
 		writer.WriteEndObject();
 	}
 }

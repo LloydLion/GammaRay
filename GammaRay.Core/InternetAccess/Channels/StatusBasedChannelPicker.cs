@@ -30,6 +30,9 @@ public sealed class StatusBasedChannelPicker(IIAPChannelMonitor _monitor) : IIAP
 			if (status.IsAvailable == false)
 				continue;
 
+			if (status.CharacteristicAccessTime == TimeSpan.MaxValue)
+				continue;
+
 			if (bestChannel is null || status.CharacteristicAccessTime <= bestChannel.Value.Status.CharacteristicAccessTime)
 				bestChannel = (status, channel);
 		}

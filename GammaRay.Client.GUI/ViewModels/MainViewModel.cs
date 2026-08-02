@@ -209,7 +209,9 @@ public sealed class ServerStateObserver(
 				var convertedStatuses = statuses.Select(s =>
 				{
 					var CAT = s.CharacteristicAccessTime.Seconds > 100000 ? TimeSpan.Zero : s.CharacteristicAccessTime.ToTimeSpan();
-					return new IAPChannelStatusViewModel($"{s.IAP}/{s.Channel}", s.Network, CAT, s.IsAvailable);
+					var AVG = s.AverageAccessTime.Seconds > 100000 ? TimeSpan.Zero : s.AverageAccessTime.ToTimeSpan();
+					var Lifetime = s.AverageLifeTime.Seconds > 100000 ? TimeSpan.Zero : s.AverageLifeTime.ToTimeSpan();
+					return new IAPChannelStatusViewModel($"{s.IAP}/{s.Channel}", s.Network, CAT, AVG, s.IsAvailable, Lifetime);
 				});
 				_statusesOutput.Clear();
 				_statusesOutput.AddRange(convertedStatuses);

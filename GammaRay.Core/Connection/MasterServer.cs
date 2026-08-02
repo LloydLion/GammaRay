@@ -82,7 +82,8 @@ public sealed class MasterServer(
 				connection.Procedure.CommitReport(new ConnectionStaleReport(isStale));
 			}
 
-			TryReroute(connection);
+			if (isStale)
+				TryReroute(connection);
 		}
 	}
 
@@ -110,21 +111,25 @@ public sealed class MasterServer(
 
 	private void TryReroute(ClientConnection connection)
 	{
-		if (connection.WasEstablished == false || connection.IsStale == false)
-			return;
-
-		var request = connection.Request.Value;
-
-		var routingRequest = new RoutingRequest(request.TargetEndPoint, connection.Procedure);
-
-		var newDecision = _router.MakeRoutingDecision(routingRequest);
-
-		if (connection.RoutingResult.Value.Channel != newDecision.Channel)
+		try
 		{
-			connection.Procedure.CommitReport(new ConnectionReroutedReport(newDecision));
-			connection.Reroute(newDecision);
-			request.IncomingConnection.ResetConnection();
+			if (connection.WasEstablished == false || connection.IsStale == false)
+				return;
+
+			var request = connection.Request.Value;
+
+			var routingRequest = new RoutingRequest(request.TargetEndPoint, connection.Procedure);
+
+			var newDecision = _router.MakeRoutingDecision(routingRequest);
+
+			if (connection.RoutingResult.Value.Channel != newDecision.Channel)
+			{
+				connection.Procedure.CommitReport(new ConnectionReroutedReport(newDecision));
+				connection.Reroute(newDecision);
+				request.IncomingConnection.ResetConnection();
+			}
 		}
+		catch { }
 	}
 
 

@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Net;
 
 namespace GammaRay.Core.InternetAccess.Channels.Testing;
 
@@ -135,6 +134,8 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		public int UnprivilegedChannelUpdatePeriodMultiplier { get; init; } = 4;
 
 		public TimeSpan TestTimeout { get; init; } = TimeSpan.FromSeconds(5);
+
+		public TimeSpan AvailabilityLogCutOff { get; init; } = TimeSpan.FromHours(1);
 	}
 
 	private record ActivationContext(ITimer UpdateTimer, SynchronizationContext CapturedSynchronizationContext);
@@ -144,6 +145,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		private readonly WriteAheadQueue _waq = new(_owner._options.WAQSize);
 		private readonly ObservationRow _observationRow = new(_owner._options.TestResultTTL, _owner._timeProvider);
 		private readonly TimeoutHandle _timeoutHandle = new(_owner._timeProvider);
+		private AvailabilityLog _availabilityLog = new(_owner._timeProvider, _owner._options.AvailabilityLogCutOff, false);
 		private bool _isUpdateRunning = false;
 		private bool _available = false;
 		private int _ignoreWAQElements = 0;
@@ -156,6 +158,8 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		public WriteAheadQueue WAQ => _waq;
 
 		public ObservationRow ObservationRow => _observationRow;
+
+		public AvailabilityLog AvailabilityLog => _availabilityLog;
 
 
 		public void Update()
@@ -204,7 +208,10 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		public void ImportObservedData(IAPChannelObservedData observedData)
 		{
 			var now = _owner._timeProvider.GetTimestamp();
+
 			_available = observedData.IsAvailable;
+			_availabilityLog = new AvailabilityLog(_owner._timeProvider, _owner._options.AvailabilityLogCutOff, _available);
+
 			var observationRowExport = observedData.ObservationRow;
 			for (int i = 0; i < observationRowExport.Length; i++)
 			{
@@ -250,6 +257,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 					else if (successInWAQ is >= 4 && _available == false)
 					{
 						_available = true;
+
 						// Ignore all pending failed tests
 						var addToWAQIgnore = 0;
 						for (int i = 1; i <= _waq.Buffer.Size; i++)
@@ -263,11 +271,14 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 					}
 				}
 
+				AvailabilityLog.Log(_available);
+
 				Status = new IAPChannelStatus(
 					_observationRow.CalculateQuantile(95),
 					_observationRow.CalculateAverage(),
 					_observationRow.CalculateAccessChance(),
-					_available
+					_available,
+					_availabilityLog.AverageLifeTime
 				);
 
 				procedure.CommitReport(new Report
@@ -445,6 +456,109 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 					(count, sumTime) = (count + 1, sumTime + item.AccessTime.Value);
 			}
 			return sumTime / count;
+		}
+	}
+
+	private class AvailabilityLog
+	{
+		private readonly TimeProvider _time;
+		private readonly TimeSpan _cutoffInterval;
+		private readonly List<LifeInterval> _intervals = new();
+		/// <summary>
+		/// Start of current (open) availability interval. If the channel is currently unavailable, this value is DateTime.MinValue.
+		/// </summary>
+		private DateTime _availabilityStart;
+
+
+		public AvailabilityLog(TimeProvider time, TimeSpan cutoffInterval, bool initialAvailability)
+		{
+			var now = time.GetUtcNow().UtcDateTime;
+			_time = time;
+			_cutoffInterval = cutoffInterval;
+
+			// If channel is available initially, we assume that it was available for infinite time, but we only work with last 'cutoffInterval' time.
+			_availabilityStart = initialAvailability ? (now - cutoffInterval) : DateTime.MinValue;
+			AverageLifeTime = CalculateAverageLifeTime(now);
+		}
+
+
+		public List<LifeInterval> Intervals => _intervals;
+
+		public TimeSpan AverageLifeTime { get; private set; }
+
+
+		public void Log(bool isAvailable)
+		{
+			var now = _time.GetUtcNow().UtcDateTime;
+			var cutoffTime = now - _cutoffInterval;
+			for (int i = 0; i < _intervals.Count; i++)
+			{
+				var interval = _intervals[i];
+				if (interval.Start <= cutoffTime)
+					_intervals[i] = interval with { Start = cutoffTime };
+
+				if (interval.Start > interval.End)
+				{
+					_intervals.RemoveAt(i);
+					i--;
+				}
+			}
+
+
+			if (isAvailable)
+			{
+				if (_availabilityStart == DateTime.MinValue)
+				{
+					_availabilityStart = now;
+				}
+				else
+				{
+					if (_availabilityStart < cutoffTime)
+						_availabilityStart = cutoffTime;
+				}
+			}
+			else
+			{
+				if (_availabilityStart != DateTime.MinValue)
+				{
+					if (_availabilityStart <= cutoffTime)
+						_availabilityStart = cutoffTime;
+
+					_intervals.Add(new LifeInterval(_availabilityStart, now));
+					_availabilityStart = DateTime.MinValue;
+				}
+			}
+
+			AverageLifeTime = CalculateAverageLifeTime(now);
+		}
+
+		private TimeSpan CalculateAverageLifeTime(DateTime now)
+		{
+			var openIntervalLength = GetOpenIntervalLength(now);
+
+			if (openIntervalLength == TimeSpan.Zero && _intervals.Count == 0)
+				return TimeSpan.Zero;
+
+			var sumDuration = openIntervalLength;
+			foreach (var interval in _intervals)
+				sumDuration += interval.Duration;
+
+			var result = openIntervalLength / sumDuration * openIntervalLength;
+			foreach (var interval in _intervals)
+				result += interval.Duration / sumDuration * interval.Duration;
+
+			return Math.Clamp(result, TimeSpan.Zero, _cutoffInterval) / 2;
+		}
+
+		private TimeSpan GetOpenIntervalLength(DateTime now)
+		{
+			return _availabilityStart == DateTime.MinValue ? TimeSpan.Zero : Math.Min(_cutoffInterval, now - _availabilityStart);
+		}
+
+
+		public readonly record struct LifeInterval(DateTime Start, DateTime End)
+		{
+			public TimeSpan Duration => End - Start;
 		}
 	}
 

@@ -16,7 +16,9 @@
 			<DataGridTextColumn Header="Channel" Binding="{Binding Channel}"/>
 			<DataGridTextColumn Header="Network" Binding="{Binding Network}"/>
 			<DataGridTextColumn Header="CAT" Binding="{Binding CharacteristicAccessTime, StringFormat={}{0:ss\\.fff}}"/>
+			<DataGridTextColumn Header="AVG" Binding="{Binding AverageAccessTime, StringFormat={}{0:ss\\.fff}}"/>
 			<DataGridCheckBoxColumn Header="Available" Binding="{Binding IsAvailable}"/>
+			<DataGridTextColumn Header="Lifetime" Binding="{Binding AverageLifeTime, StringFormat={}{0:hh\\:mm}}"/>
 		</DataGrid.Columns>
 	</DataGrid>
 </UserControl>

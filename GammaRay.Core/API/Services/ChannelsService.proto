@@ -25,4 +25,5 @@ message IAPChannelStatusResponse {
 	google.protobuf.Duration averageAccessTime = 5;
 	double accessChance = 6;
 	bool isAvailable = 7;
+	google.protobuf.Duration averageLifeTime = 8;
 }

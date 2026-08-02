@@ -40,7 +40,8 @@ public sealed class APIChannelsService(
 					IsAvailable = status.IsAvailable,
 					AccessChance = status.AccessChance,
 					AverageAccessTime = Duration.FromTimeSpan(status.AverageAccessTime),
-					CharacteristicAccessTime = Duration.FromTimeSpan(status.CharacteristicAccessTime)
+					CharacteristicAccessTime = Duration.FromTimeSpan(status.CharacteristicAccessTime),
+					AverageLifeTime = Duration.FromTimeSpan(status.AverageLifeTime)
 				};
 				await responseStream.WriteAsync(message);
 			}
