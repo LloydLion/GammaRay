@@ -30,8 +30,8 @@ public sealed class SmartRouter(
 {
 	public NamedIAPChannel MakeRoutingDecision(RoutingRequest request)
 	{
-		var networkIdentity = _networkIdentifier.CurrentIdentity;
-		var networkProfile = _networkProfileRepository.GetProfileForOrNull(networkIdentity) ?? throw new Exception("No internet connection detected");
+		var networkIdentity = _networkIdentifier.LastReachableIdentity;
+		var networkProfile = _networkProfileRepository.GetProfileFor(networkIdentity);
 
 		var endPointCategory = _endpointCategorizer.Categorize(request.Destination);
 

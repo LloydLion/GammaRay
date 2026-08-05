@@ -6,6 +6,8 @@ public interface INetworkIdentifier
 
 	public NetworkIdentity? CurrentIdentity { get; }
 
+	public NetworkIdentity? LastReachableIdentity { get; }
+
 
 	public IDisposable SubscribeForChanges(Action<INetworkIdentifier> callback);
 }

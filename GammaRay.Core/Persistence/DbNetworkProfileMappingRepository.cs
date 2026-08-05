@@ -10,12 +10,15 @@ public sealed class DbNetworkProfileMappingRepository(
 	NetworkProfileProvider _profiles
 ) : AsyncDbRepository<DbNetworkProfileMappingRepository.State, DbNetworkProfileMappingRepository.Mutation>(connectionFactory), INetworkProfileMappingRepository
 {
-	public NetworkProfile GetProfileFor(NetworkIdentity identity)
+	public NetworkProfile GetProfileFor(NetworkIdentity? identity)
 	{
-		if (CurrentState.Mapping.TryGetValue(identity, out var profile))
+		if (identity is null)
+			return _profiles.DefaultProfile;
+
+		if (CurrentState.Mapping.TryGetValue(identity.Value, out var profile))
 			return profile ?? _profiles.DefaultProfile;
 
-		Write(new Mutation(identity, null));
+		Write(new Mutation(identity.Value, null));
 		return _profiles.DefaultProfile;
 	}
 

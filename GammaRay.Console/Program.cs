@@ -221,15 +221,6 @@ internal class Program
 	}
 
 
-	public class DummyNetProfileMapping(NetworkProfileProvider _networkProfileProvider) : INetworkProfileMappingRepository
-	{
-		public IReadOnlyDictionary<NetworkIdentity, NetworkProfile?> GetMapping() => ImmutableDictionary<NetworkIdentity, NetworkProfile?>.Empty;
-
-		public NetworkProfile GetProfileFor(NetworkIdentity identity) => _networkProfileProvider.DefaultProfile;
-
-		public void SetProfileFor(NetworkIdentity identity, NetworkProfile profile) { }
-	}
-
 	private class Locator : IFileSystemLocator
 	{
 		public bool Exists(string filePath)

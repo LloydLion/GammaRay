@@ -21,6 +21,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 	private readonly Ping _pingAgent = new();
 	private SynchronizationContext? _synchronizationContext;
 	private DateTime? _lastRefresh;
+	private NetworkIdentity? _lastReachableIdentity;
 	private NetworkIdentity? _identity;
 	private int _isRefreshing = 0;
 
@@ -34,6 +35,8 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 
 
 	public DateTime LastRefresh => _lastRefresh ?? throw ThrowNotInitialized();
+
+	public NetworkIdentity? LastReachableIdentity => _lastRefresh is null ? throw ThrowNotInitialized() : _lastReachableIdentity;
 
 	public NetworkIdentity? CurrentIdentity => _lastRefresh is null ? throw ThrowNotInitialized() : _identity;
 
@@ -67,7 +70,9 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 
 		async Task callback()
 		{
+			_lastRefresh = _time.GetUtcNow().DateTime;
 			TrackableProcedure procedure = TrackableProcedure.New("NetworkIdentityRefresh", _time, _monitoringSystem);
+
 			try
 			{
 				using var report = new Report(procedure) { IdentifierName = GetType().Name };
@@ -77,7 +82,7 @@ public abstract class NetworkIdentifierBase : INetworkIdentifier, IDisposable
 				var isInternetReachable = await PingInternet();
 
 				_identity = isInternetReachable ? newIdentity : null;
-				_lastRefresh = _time.GetUtcNow().DateTime;
+				if (isInternetReachable) _lastReachableIdentity = newIdentity;
 
 				foreach (var subscriber in _subscribers)
 					subscriber.Call();
