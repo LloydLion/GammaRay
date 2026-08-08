@@ -1,5 +1,5 @@
 using GammaRay.Core.API.Services.Proto;
-using GammaRay.Core.Network.Profiles;
+using GammaRay.Core.Utils.FileSystem;
 
 namespace GammaRay.Core.API.Client;
 
@@ -17,7 +17,7 @@ public interface IGammaRayAPIClient
 
 	public ValueTask RequestReloadApplicationAsync();
 
-	public ValueTask<string> RequestReadSettingsAsync();
+	public IFileSystemLocator CreateRemoteFileSystemLocator();
 
 	public ValueTask RequestWriteSettingsAsync(string settingsContent);
 

@@ -1,6 +1,5 @@
 using GammaRay.Core.Utils.FileSystem;
 using Microsoft.Extensions.Options;
-using System.Text;
 
 namespace GammaRay.Core.Settings;
 
@@ -9,34 +8,21 @@ public class SettingsFileHolder(IOptions<SettingsFileHolder.Options> options, IF
 	private readonly Options _options = options.Value;
 
 
-	public TextReader ReadConfigurationFile(bool readBackupFile = false)
+	public async ValueTask<string> ReadConfigurationFileAsync(bool readBackupFile = false)
 	{
 		if (readBackupFile)
 			goto readBackup;
-		try
-		{
-			if (_fileSystem.Exists(_options.FileName) == false)
-				goto readBackup;
-			var stream = _fileSystem.Open(_options.FileName, FileMode.Open, FileAccess.Read, FileShare.None);
-			if (stream.Length == 0)
-				goto readBackup;
-			return new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, -1, leaveOpen: false);
-		}
-		catch (IOException) { }
+
+		var content = await _fileSystem.GetFileContentAsync(_options.FileName);
+		if (content is null)
+			goto readBackup;
+		return content;
 
 	readBackup: // Try open backup file
-		var backupStream = _fileSystem.Open(_options.BackupFileName, FileMode.Open, FileAccess.Read, FileShare.None);
-		return new StreamReader(backupStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, -1, leaveOpen: false);
+		return (await _fileSystem.GetFileContentAsync(_options.BackupFileName)) ?? throw new FileNotFoundException("Configuration file not found (main and backup)");
 	}
 
-	public TextWriter WriteConfigurationFile(bool clearExisting = true)
-	{
-		if (clearExisting && _fileSystem.Exists(_options.FileName))
-			_fileSystem.Move(_options.FileName, _options.BackupFileName, overwrite: true);
-
-		var stream = _fileSystem.Open(_options.FileName, clearExisting ? FileMode.CreateNew : FileMode.Open, FileAccess.Write, FileShare.None);
-		return new StreamWriter(stream, Encoding.UTF8, -1, leaveOpen: false);
-	}
+	public async ValueTask WriteConfigurationFileAsync(string content) => await _fileSystem.SetFileContentAsync(_options.FileName, content);
 
 
 	public class Options

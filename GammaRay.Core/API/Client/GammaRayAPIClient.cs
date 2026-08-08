@@ -2,6 +2,7 @@ using GammaRay.Core.API.Services.Proto;
 using Grpc.Core;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics;
+using GammaRay.Core.Utils.FileSystem;
 
 namespace GammaRay.Core.API.Client;
 
@@ -35,10 +36,9 @@ public class GammaRayAPIClient() : IGammaRayAPIClient
 		return response.Version;
 	}
 
-	public async ValueTask<string> RequestReadSettingsAsync()
+	public IFileSystemLocator CreateRemoteFileSystemLocator()
 	{
-		var response = await RequireConnection().ServiceClient.Settings.GetCurrentSettingsFileAsync(new Empty());
-		return response.Content;
+		return new RemoteFileSystemLocator(RequireConnection().ServiceClient.FileSystem);
 	}
 
 	public async ValueTask RequestReloadApplicationAsync()
@@ -49,7 +49,7 @@ public class GammaRayAPIClient() : IGammaRayAPIClient
 
 	public async ValueTask RequestWriteSettingsAsync(string settingsContent)
 	{
-		await RequireConnection().ServiceClient.Settings.UploadNewSettingsFileAsync(new SettingsFileRequest { Content = settingsContent });
+		await RequireConnection().ServiceClient.FileSystem.SetFileContentAsync(new SetFileContentRequest { Path = "settings.json", Content = settingsContent });
 	}
 
 	public void AddEventListener(IAPIEventListener listener) => _eventListeners.Add(listener);

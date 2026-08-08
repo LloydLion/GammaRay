@@ -13,6 +13,7 @@ using GammaRay.Core.Routing.Categorization;
 using GammaRay.Core.Services;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils;
+using GammaRay.Core.Utils.FileSystem;
 using Microsoft.Extensions.DependencyInjection;
 using ReactiveUI;
 using System.Collections.ObjectModel;
@@ -72,9 +73,14 @@ public class MainViewModel : ViewModelBase
 		var monitoringConnectionTracker = new MonitoringConnectionTracker(Connections.Connections);
 		var monitoringSystem = new MonitoringSystem([monitoringConnectionTracker]);
 
-		var settings = await _apiClient.RequestReadSettingsAsync();
+		var remoteFS = _apiClient.CreateRemoteFileSystemLocator();
+		var settings = await remoteFS.GetFileContentAsync("settings.yaml");
+		settings ??= await remoteFS.GetFileContentAsync("settings.bak.yaml");
+		if (settings is null)
+			throw new Exception("Failed to load settings from server");
+
 		var settingServicesBuilder = new ServiceCollection();
-		LoadSettings(settings, settingServicesBuilder);
+		LoadSettings(settings, settingServicesBuilder, remoteFS);
 		settingServicesBuilder.AddSingleton<MonitoringSerializerOptionsSource>();
 		var settingServices = settingServicesBuilder.BuildServiceProvider();
 
@@ -147,19 +153,17 @@ public class MainViewModel : ViewModelBase
 		networkWindow.Show(_owner);
 	}
 
-	private static void LoadSettings(string settingsContent, IServiceCollection output)
+	private static void LoadSettings(string settingsContent, IServiceCollection output, IFileSystemLocator fileSystem)
 	{
-		using var settingsFile = new StringReader(settingsContent);
-
 		var YAMLLoader = new YAMLConfigurationLoader();
 
 		var networkProfileRawProvider = new YAMLNetworkProfileRawProvider();
-		var endPointCategoryRawProvider = new YAMLEndPointCategoryRawProvider(new DummyLocator());
+		var endPointCategoryRawProvider = new YAMLEndPointCategoryRawProvider(fileSystem);
 		var internetAccessPointRawProvider = new YAMLInternetAccessPointRawProvider();
 		var capabilityClassRawProvider = new YAMLCapabilityClassRawProvider();
 		var endPointRoutingConfigurationRawProvider = new YAMLEndPointRoutingConfigurationRawProvider();
 
-		YAMLLoader.LoadSettings(settingsFile);
+		YAMLLoader.LoadSettings(settingsContent);
 
 		networkProfileRawProvider.Initialize(YAMLLoader);
 		endPointCategoryRawProvider.Initialize(YAMLLoader);

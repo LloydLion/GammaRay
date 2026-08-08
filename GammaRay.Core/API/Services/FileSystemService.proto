@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package GammaRay.Core.API;
+
+import "API/Services/common.proto";
+
+option csharp_namespace = "GammaRay.Core.API.Services.Proto";
+
+service FileSystemService {
+	rpc GetFileContent(GetFileContentRequest) returns (GetFileContentResponse);
+	rpc SetFileContent(SetFileContentRequest) returns (Empty);
+	rpc MoveFile(MoveFileRequest) returns (MoveFileResponse);
+	rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse);
+}
+
+
+message GetFileContentRequest {
+	string path = 1;
+}
+
+message GetFileContentResponse {
+	optional string content = 1;
+}
+
+message SetFileContentRequest {
+	string path = 1;
+	optional string content = 2;
+}
+
+message MoveFileRequest {
+	string sourcePath = 1;
+	string destinationPath = 2;
+}
+
+message MoveFileResponse {
+	bool success = 1;
+}
+
+message ListDirectoryRequest {
+	string directoryPath = 1;
+	bool recursive = 2;
+}
+
+message ListDirectoryResponse {
+	repeated string entries = 1;
+}

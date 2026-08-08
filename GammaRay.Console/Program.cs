@@ -97,7 +97,7 @@ internal class Program
 				.AddSingleton<APIControlService>()
 				.AddSingleton<APIMonitoringService>()
 				.AddSingleton<APIServicesService>()
-				.AddSingleton<APISettingsService>()
+				.AddSingleton<APIFileSystemService>()
 				.AddSingleton<APINetworkService>()
 				.AddSingleton<APIServer>()
 
@@ -149,7 +149,7 @@ internal class Program
 		//
 		// Additionally: RoutingGrid
 
-		var fileSystemLocator = new Locator();
+		var fileSystemLocator = new LocalFileSystemLocator(Options.Create(new LocalFileSystemLocator.Options()));
 
 		var settingsFileHolder = new SettingsFileHolder(Options.Create(new SettingsFileHolder.Options()), fileSystemLocator);
 
@@ -158,7 +158,7 @@ internal class Program
 	retryLoadSettings:
 		try
 		{
-			using var settingsFile = settingsFileHolder.ReadConfigurationFile(readBackupSettingsFile);
+			var settingsContent = settingsFileHolder.ReadConfigurationFileAsync(readBackupSettingsFile).Result;
 
 			var YAMLLoader = new YAMLConfigurationLoader();
 
@@ -172,7 +172,7 @@ internal class Program
 
 			var routingRuleRawProvider = new YAMLRoutingRuleRawProvider();
 
-			YAMLLoader.LoadSettings(settingsFile);
+			YAMLLoader.LoadSettings(settingsContent);
 
 
 			inboundRawProvider.Initialize(YAMLLoader);
@@ -217,25 +217,6 @@ internal class Program
 				readBackupSettingsFile = true;
 				goto retryLoadSettings;
 			}
-		}
-	}
-
-
-	private class Locator : IFileSystemLocator
-	{
-		public bool Exists(string filePath)
-		{
-			return File.Exists(filePath);
-		}
-
-		public void Move(string originalFilePath, string newFilePath, bool overwrite = false)
-		{
-			File.Move(originalFilePath, newFilePath, overwrite);
-		}
-
-		public Stream Open(string path, FileMode mode = FileMode.Open, FileAccess access = FileAccess.Read, FileShare share = FileShare.None)
-		{
-			return File.Open(path, mode, access, share);
 		}
 	}
 }

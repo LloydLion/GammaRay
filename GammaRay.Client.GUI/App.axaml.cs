@@ -5,11 +5,7 @@ using GammaRay.Client.GUI.ViewModels;
 using GammaRay.Client.GUI.Views;
 using GammaRay.Core.API.Client;
 using GammaRay.Core.Connection;
-using GammaRay.Core.Connection.Inbound;
 using GammaRay.Core.Monitoring;
-using GammaRay.Core.Network;
-using GammaRay.Core.Routing;
-using GammaRay.Core.Utils.FileSystem;
 
 namespace GammaRay.Client.GUI;
 
@@ -36,18 +32,6 @@ public partial class App : Application
 		}
 
 		base.OnFrameworkInitializationCompleted();
-	}
-}
-
-public class DummyLocator : IFileSystemLocator
-{
-	public bool Exists(string filePath) => true;
-
-	public void Move(string originalFilePath, string newFilePath, bool overwrite = false) { }
-
-	public Stream Open(string path, FileMode mode = FileMode.Open, FileAccess access = FileAccess.Read, FileShare share = FileShare.None)
-	{
-		return Stream.Null;
 	}
 }
 

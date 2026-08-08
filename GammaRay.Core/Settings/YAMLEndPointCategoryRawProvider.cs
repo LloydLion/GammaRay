@@ -31,17 +31,13 @@ public class YAMLEndPointCategoryRawProvider(IFileSystemLocator _fileSystemLocat
 
 			if (node.TryBindChild<string>("patternsListFile", out var filePath))
 			{
-				using var stream = _fileSystemLocator!.Open(filePath);
-				using var reader = new StreamReader(stream);
-				while (true)
-				{
-					var line = reader.ReadLine();
-					if (line is null)
-						break;
+				var content = _fileSystemLocator!.GetFileContentAsync(filePath).AsTask().Result ?? throw new FileNotFoundException($"Patterns list file not found: {filePath}");
+				var lines = content.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
 
+				foreach (var line in lines)
+				{
 					if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#') || line.StartsWith("//"))
 						continue;
-
 					patterns.Add(EndPointPattern.Parse(line));
 				}
 			}
