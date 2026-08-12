@@ -9,40 +9,57 @@ public sealed class LocalFileSystemLocator(IOptions<LocalFileSystemLocator.Optio
 
 	public async ValueTask<string?> GetFileContentAsync(string path)
 	{
-		path = GetPath(path);
-		return File.Exists(path) ? await File.ReadAllTextAsync(path) : null;
+		var pathInfo = GetPath(path);
+		return File.Exists(pathInfo.AbsolutePath) ? await File.ReadAllTextAsync(pathInfo.AbsolutePath) : null;
 	}
 
 	public ValueTask<IEnumerable<string>> ListDirectoryAsync(string path, bool recursive)
 	{
-		return ValueTask.FromResult(Directory.GetFiles(path, "", SearchOption.AllDirectories).Select(GetPath));
+		var directoryPath = Path.Combine(_options.BasePath, path);
+		return ValueTask.FromResult(
+			Directory
+				.GetFiles(directoryPath, "*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
+				.Select(filePath => Path.GetRelativePath(directoryPath, filePath))
+		);
 	}
 
 	public ValueTask<bool> MoveFileAsync(string path, string newPath)
 	{
-		path = GetPath(path);
-		if (File.Exists(path))
-		{
-			File.Move(path, GetPath(newPath));
-			return ValueTask.FromResult(true);
-		}
-		return ValueTask.FromResult(false);
+		var originalFile = GetPath(path);
+		if (File.Exists(originalFile.AbsolutePath) == false)
+			return ValueTask.FromResult(false);
+
+		var destinationFile = GetPath(newPath);
+		if (Directory.Exists(destinationFile.DirectoryAbsolutePath) == false)
+			Directory.CreateDirectory(destinationFile.DirectoryAbsolutePath);
+		File.Move(originalFile.AbsolutePath, destinationFile.AbsolutePath);
+		return ValueTask.FromResult(true);
 	}
 
 	public async ValueTask SetFileContentAsync(string path, string? content)
 	{
-		path = GetPath(path);
-		if (content is null)
-			File.Delete(path);
+		var fileInfo = GetPath(path);
+		if (content is null && Directory.Exists(fileInfo.DirectoryAbsolutePath))
+			File.Delete(fileInfo.AbsolutePath);
 		else
-			await File.WriteAllTextAsync(path, content);
+		{
+			if (Directory.Exists(fileInfo.DirectoryAbsolutePath) == false)
+				Directory.CreateDirectory(fileInfo.DirectoryAbsolutePath);
+			await File.WriteAllTextAsync(fileInfo.AbsolutePath, content);
+		}
 	}
 
-	private string GetPath(string path) => Path.Combine(_options.BasePath, path);
+	private FilePathInformation GetPath(string path)
+	{
+		var fullFilePath = Path.GetFullPath(Path.Combine(_options.BasePath, path));
+		return new FilePathInformation(fullFilePath, Path.GetDirectoryName(fullFilePath) ?? "");
+	}
 
 
 	public class Options
 	{
 		public string BasePath { get; set; } = Environment.CurrentDirectory;
 	}
+	
+	private record struct FilePathInformation(string AbsolutePath, string DirectoryAbsolutePath);
 }

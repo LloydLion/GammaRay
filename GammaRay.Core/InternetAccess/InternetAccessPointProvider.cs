@@ -1,6 +1,7 @@
+using System.Collections.Immutable;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.Network.Profiles;
-using GammaRay.Core.Settings;
+using GammaRay.Core.Settings.Model;
 
 namespace GammaRay.Core.InternetAccess;
 
@@ -11,16 +12,26 @@ public sealed class InternetAccessPointProvider
 	public const string LocalIAPChannelDriverName = "local";
 
 
-	public InternetAccessPointProvider(IRawSettingsProvider<IReadOnlyCollection<InternetAccessPoint>> rawProvider, NetworkProfileProvider networkProfiles)
+	public InternetAccessPointProvider(SettingsModelRoot modelRoot, NetworkProfileProvider networkProfiles)
 	{
-		var rawPoints = rawProvider.Get();
+		var IAPs = modelRoot.InternetAccessPoints.Select(cm => new InternetAccessPoint(cm.Key, cm.Value.Channels.Select(cm =>
+		{
+			var channel = new IAPChannel(cm.Value.Protocol, cm.Value.EndPoint)
+			{
+				AvailableInNetwork = cm.Value.AvailableInNetwork?.Select(n => networkProfiles.Profiles[n]).ToArray() 
+					?? networkProfiles.PlainProfiles.ToArray(),
+				Parameters = cm.Value.Parameters ?? (IReadOnlyDictionary<string, string>)ImmutableDictionary<string, string>.Empty,
+				Tags = cm.Value.Tags ?? []
+			};
+			return KeyValuePair.Create(cm.Key, channel);
+		}).ToDictionary())).ToArray();
 
-		var invalidIAP = rawPoints.FirstOrDefault(s => s.Name.StartsWith(LocalIAPPrefix));
+		var invalidIAP = IAPs.FirstOrDefault(s => s.Name.StartsWith(LocalIAPPrefix));
 		if (invalidIAP is not null)
 			throw new ArgumentException($"'{invalidIAP.Name}' is invalid: '{LocalIAPPrefix}' is reserved prefix");
 
-		RemoteInternetAccessPoints = rawPoints.ToDictionary(s => s.Name);
-		PlainRemoteInternetAccessPoints = rawPoints.ToArray();
+		RemoteInternetAccessPoints = IAPs.ToDictionary(s => s.Name);
+		PlainRemoteInternetAccessPoints = IAPs.ToArray();
 
 		LocalInternetAccessPointsByProfile = networkProfiles.PlainProfiles.ToDictionary(s => s, createLocalIAP);
 		LocalInternetAccessPointsByName = LocalInternetAccessPointsByProfile.ToDictionary(kv => kv.Key.Name, kv => kv.Value);

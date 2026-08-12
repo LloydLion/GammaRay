@@ -3,14 +3,10 @@ using DynamicData;
 using GammaRay.Client.GUI.Views;
 using GammaRay.Core.API.Client;
 using GammaRay.Core.API.Services.Proto;
-using GammaRay.Core.InternetAccess;
 using GammaRay.Core.Monitoring;
 using GammaRay.Core.Monitoring.Converters;
 using GammaRay.Core.Network;
 using GammaRay.Core.Network.Profiles;
-using GammaRay.Core.Routing;
-using GammaRay.Core.Routing.Categorization;
-using GammaRay.Core.Services;
 using GammaRay.Core.Settings;
 using GammaRay.Core.Utils;
 using GammaRay.Core.Utils.FileSystem;
@@ -19,6 +15,7 @@ using ReactiveUI;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Reactive;
+using Microsoft.Extensions.Options;
 using NetworkIdentity = GammaRay.Core.Network.Identity.NetworkIdentity;
 using ServiceIAPStatus = GammaRay.Core.Services.Probing.ServiceIAPStatus;
 
@@ -73,14 +70,11 @@ public class MainViewModel : ViewModelBase
 		var monitoringConnectionTracker = new MonitoringConnectionTracker(Connections.Connections);
 		var monitoringSystem = new MonitoringSystem([monitoringConnectionTracker]);
 
-		var remoteFS = _apiClient.CreateRemoteFileSystemLocator();
-		var settings = await remoteFS.GetFileContentAsync("settings.yaml");
-		settings ??= await remoteFS.GetFileContentAsync("settings.bak.yaml");
-		if (settings is null)
-			throw new Exception("Failed to load settings from server");
-
+		var remoteFileSystem = _apiClient.CreateRemoteFileSystemLocator();
+		
 		var settingServicesBuilder = new ServiceCollection();
-		LoadSettings(settings, settingServicesBuilder, remoteFS);
+		await LoadSettingsAsync(settingServicesBuilder, remoteFileSystem);
+		
 		settingServicesBuilder.AddSingleton<MonitoringSerializerOptionsSource>();
 		var settingServices = settingServicesBuilder.BuildServiceProvider();
 
@@ -153,36 +147,10 @@ public class MainViewModel : ViewModelBase
 		networkWindow.Show(_owner);
 	}
 
-	private static void LoadSettings(string settingsContent, IServiceCollection output, IFileSystemLocator fileSystem)
+	private static async Task LoadSettingsAsync(IServiceCollection output, IFileSystemLocator fileSystem)
 	{
-		var YAMLLoader = new YAMLConfigurationLoader();
-
-		var networkProfileRawProvider = new YAMLNetworkProfileRawProvider();
-		var endPointCategoryRawProvider = new YAMLEndPointCategoryRawProvider(fileSystem);
-		var internetAccessPointRawProvider = new YAMLInternetAccessPointRawProvider();
-		var capabilityClassRawProvider = new YAMLCapabilityClassRawProvider();
-		var endPointRoutingConfigurationRawProvider = new YAMLEndPointRoutingConfigurationRawProvider();
-
-		YAMLLoader.LoadSettings(settingsContent);
-
-		networkProfileRawProvider.Initialize(YAMLLoader);
-		endPointCategoryRawProvider.Initialize(YAMLLoader);
-		capabilityClassRawProvider.Initialize(YAMLLoader);
-
-		var networkProfileProvider = new NetworkProfileProvider(networkProfileRawProvider);
-		output.AddSingleton(networkProfileProvider);
-		var endPointCategoryProvider = new EndPointCategoriesProvider(endPointCategoryRawProvider);
-		output.AddSingleton(endPointCategoryProvider);
-		var capabilityClassProvider = new CapabilityClassProvider(capabilityClassRawProvider);
-		output.AddSingleton(capabilityClassProvider);
-
-		internetAccessPointRawProvider.Initialize(YAMLLoader, networkProfileProvider);
-		var internetAccessPointProvider = new InternetAccessPointProvider(internetAccessPointRawProvider, networkProfileProvider);
-		output.AddSingleton(internetAccessPointProvider);
-
-		endPointRoutingConfigurationRawProvider.Initialize(YAMLLoader, internetAccessPointProvider);
-		var endPointRoutingConfigurationProvider = new EndPointRoutingConfigurationProvider(endPointRoutingConfigurationRawProvider);
-		output.AddSingleton(endPointRoutingConfigurationProvider);
+		var loader = new SettingsLoader(Options.Create(new SettingsLoader.Options()));
+		await loader.LoadSettingsAsync(fileSystem, output);
 	}
 }
 

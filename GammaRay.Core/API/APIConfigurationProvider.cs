@@ -1,8 +1,13 @@
-using GammaRay.Core.Settings;
+using GammaRay.Core.Settings.Model;
 
 namespace GammaRay.Core.API;
 
-public sealed class APIConfigurationProvider(IRawSettingsProvider<APIConfiguration> _configurationProvider)
+public sealed class APIConfigurationProvider(SettingsModelRoot modelRoot)
 {
-	public APIConfiguration Configuration { get; } = _configurationProvider.Get();
+	public APIConfiguration Configuration { get; } = 
+		new(
+			modelRoot.API?.EndPoints
+				.Select(modelEndpoint => new APIEndpointInformation(modelEndpoint.BindAddress, modelEndpoint.Port))
+				.ToArray() ?? []
+		);
 }

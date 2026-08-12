@@ -1,5 +1,5 @@
 using GammaRay.Core.Network;
-using GammaRay.Core.Settings;
+using GammaRay.Core.Settings.Model;
 
 namespace GammaRay.Core.Routing.Categorization;
 
@@ -8,9 +8,17 @@ public sealed class EndPointCategoriesProvider
 	public const string DefaultCategoryName = "default";
 
 
-	public EndPointCategoriesProvider(IRawSettingsProvider<IReadOnlyCollection<EndPointCategory>> rawProvider)
+	public EndPointCategoriesProvider(SettingsModelRoot modelRoot)
 	{
-		var rawCategories = rawProvider.Get();
+		var rawCategories = modelRoot.EndPointCategories.Select(cm =>
+		{
+			var explicitPatterns = cm.Value.Patterns ?? [];
+			var listFilePatterns = cm.Value.PatternsListFile?.FileRawContent
+				.Split("\n", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) ?? [];
+
+			var patterns = explicitPatterns.Concat(listFilePatterns).Select(EndPointPattern.Parse).ToArray();
+			return new EndPointCategory(cm.Key, patterns);
+		}).ToArray();
 
 		if (rawCategories.Any(s => s.Name == DefaultCategoryName))
 			throw new ArgumentException($"Category name '{DefaultCategoryName}' is reserved");

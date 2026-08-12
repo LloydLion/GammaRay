@@ -1,12 +1,21 @@
-using GammaRay.Core.Settings;
+using GammaRay.Core.Network.Profiles;
+using GammaRay.Core.Routing.Categorization;
+using GammaRay.Core.Settings.Model;
+using GammaRay.Core.Utils.ValueMatching;
 
 namespace GammaRay.Core.Routing.Rules;
 
 public class RoutingRulesProvider
 {
-	public RoutingRulesProvider(IRawSettingsProvider<IReadOnlyList<RoutingRule>> rawProvider)
+	public RoutingRulesProvider(SettingsModelRoot modelRoot, EndPointRoutingConfigurationProvider endpointRoutingConfigurations)
 	{
-		var rules = rawProvider.Get();
+		var rules = modelRoot.RoutingRules.Select(cm => new RoutingRule(endpointRoutingConfigurations.GetConfigurationByName(cm.To))
+		{
+			EndPointCategoryCondition = cm.EndPointCategory?.Select((EndPointCategory c) => c.Name) ??
+				(ValueCondition<EndPointCategory>)NoneValueCondition<EndPointCategory>.AlwaysTrue,
+			NetworkProfileCondition = cm.EndPointCategory?.Select((NetworkProfile c) => c.Name) ?? 
+				(ValueCondition<NetworkProfile>)NoneValueCondition<NetworkProfile>.AlwaysTrue
+		});
 		Rules = rules.ToArray();
 	}
 

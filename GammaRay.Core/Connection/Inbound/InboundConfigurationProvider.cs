@@ -1,12 +1,15 @@
-using GammaRay.Core.Settings;
+using GammaRay.Core.Settings.Model;
 
 namespace GammaRay.Core.Connection.Inbound;
 
 public sealed class InboundConfigurationProvider
 {
-	public InboundConfigurationProvider(IRawSettingsProvider<IReadOnlyDictionary<string, InboundConfiguration>> rawProvider)
+	public InboundConfigurationProvider(SettingsModelRoot modelRoot)
 	{
-		InboundConfigurations = rawProvider.Get().ToDictionary();
+		InboundConfigurations = modelRoot.Inbounds
+			.Select(cm => KeyValuePair.Create(cm.Key, new InboundConfiguration(cm.Value.Protocol, cm.Value.EndPoint)))
+			.ToDictionary();
+		
 		PlainInboundConfigurations = InboundConfigurations.Values.ToArray();
 	}
 

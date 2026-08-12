@@ -1,10 +1,8 @@
-using GammaRay.Core;
 using GammaRay.Core.API;
 using GammaRay.Core.API.Services;
 using GammaRay.Core.Connection;
 using GammaRay.Core.Connection.Inbound;
 using GammaRay.Core.Host;
-using GammaRay.Core.InternetAccess;
 using GammaRay.Core.InternetAccess.Channels;
 using GammaRay.Core.InternetAccess.Channels.Drivers;
 using GammaRay.Core.InternetAccess.Channels.Testing;
@@ -14,8 +12,6 @@ using GammaRay.Core.Network.Identity;
 using GammaRay.Core.Network.Profiles;
 using GammaRay.Core.Persistence;
 using GammaRay.Core.Routing;
-using GammaRay.Core.Routing.Categorization;
-using GammaRay.Core.Routing.Rules;
 using GammaRay.Core.Services;
 using GammaRay.Core.Services.Probing;
 using GammaRay.Core.Services.Probing.Drivers;
@@ -24,33 +20,36 @@ using GammaRay.Core.Utils;
 using GammaRay.Core.Utils.FileSystem;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using System.Collections.Immutable;
+using Nito.AsyncEx;
 
-internal class Program
+namespace GammaRay.Console;
+
+internal static class Program
 {
-	private static void Main(string[] args)
+	private static void Main(string[] _)
 	{
 		var applicationControl = new ApplicationControl(async (applicationControl, cancel) =>
 		{
 			var services = new ServiceCollection();
-
-			LoadSettings(services);
+			var fileSystemLocator = new LocalFileSystemLocator(Options.Create(new LocalFileSystemLocator.Options()));
+			LoadSettings(services, fileSystemLocator);
 
 			await using var sp = services
 				.AddSingleton(applicationControl)
 
 				.AddSingleton(TimeProvider.System)
+				.AddSingleton<IFileSystemLocator>(fileSystemLocator)
 
 				.Configure<SQLiteConnectionFactory.Options>(options => { options.ConnectionString = "Data Source=data.db"; })
 				.AddSingleton<IDbConnectionFactory, SQLiteConnectionFactory>()
-				.Configure<DbServiceRepository.Options>(s => { })
+				.Configure<DbServiceRepository.Options>(_ => { })
 				.AddSingleton<IServiceRepository, DbServiceRepository>()
-				.Configure<DbServiceStatusTableRepository.Options>(s => { })
+				.Configure<DbServiceStatusTableRepository.Options>(_ => { })
 				.AddSingleton<IServiceStatusTableRepository, DbServiceStatusTableRepository>()
 				.AddSingleton<IIAPChannelObservedDataRepository, DbIAPChannelObservedDataRepository>()
 				.AddSingleton<INetworkProfileMappingRepository, DbNetworkProfileMappingRepository>()
 
-				.Configure<HTTPInboundDriver.Options>(s => { })
+				.Configure<HTTPInboundDriver.Options>(_ => { })
 				.AddSingleton<IInboundDriver, HTTPInboundDriver>()
 				.AddSingleton<IInboundDriver, SOCKS5InboundDriver>()
 				.AddSingleton<IDriverRegistry<IInboundDriver>, ReflectionBasedDriverRegistry<IInboundDriver>>()
@@ -71,11 +70,11 @@ internal class Program
 #endif
 
 				.AddSingleton<ICapabilityDetector, DefaultCapabilityDetector>()
-				.Configure<ProbingManager.Options>(s => { })
+				.Configure<ProbingManager.Options>(_ => { })
 				.AddSingleton<IProbingManager, ProbingManager>()
 
 				.AddSingleton<IIAPChannelPicker, StatusBasedChannelPicker>()
-				.Configure<DefaultIAPChannelMonitor.Options>(s => { })
+				.Configure<DefaultIAPChannelMonitor.Options>(_ => { })
 				.AddSingleton<IIAPChannelMonitor, DefaultIAPChannelMonitor>()
 				.AddSingleton<IIAPChannelSimpleTester, IAPChannelSimpleTester>()
 
@@ -137,86 +136,12 @@ internal class Program
 		applicationControl.MainLoop();
 	}
 
-	private static void LoadSettings(IServiceCollection services)
+	private static void LoadSettings(IServiceCollection services, IFileSystemLocator fileSystemLocator)
 	{
-		// Entities:
-		// - InboundConfiguration
-		// - NetworkProfile
-		// - EndPointCategory
-		// - InternetAccessPoint
-		// - CapabilityClass
-		// - EndPointRoutingConfiguration
-		//
-		// Additionally: RoutingGrid
-
-		var fileSystemLocator = new LocalFileSystemLocator(Options.Create(new LocalFileSystemLocator.Options()));
-
-		var settingsFileHolder = new SettingsFileHolder(Options.Create(new SettingsFileHolder.Options()), fileSystemLocator);
-
-		bool readBackupSettingsFile = false;
-
-	retryLoadSettings:
-		try
+		AsyncContext.Run(async () =>
 		{
-			var settingsContent = settingsFileHolder.ReadConfigurationFileAsync(readBackupSettingsFile).Result;
-
-			var YAMLLoader = new YAMLConfigurationLoader();
-
-			var inboundRawProvider = new YAMLInboundRawProvider();
-			var networkProfileRawProvider = new YAMLNetworkProfileRawProvider();
-			var endPointCategoryRawProvider = new YAMLEndPointCategoryRawProvider(fileSystemLocator);
-			var internetAccessPointRawProvider = new YAMLInternetAccessPointRawProvider();
-			var capabilityClassRawProvider = new YAMLCapabilityClassRawProvider();
-			var endPointRoutingConfigurationRawProvider = new YAMLEndPointRoutingConfigurationRawProvider();
-			var apiConfigurationRawProvider = new YAMLAPIConfigurationRawProvider();
-
-			var routingRuleRawProvider = new YAMLRoutingRuleRawProvider();
-
-			YAMLLoader.LoadSettings(settingsContent);
-
-
-			inboundRawProvider.Initialize(YAMLLoader);
-			networkProfileRawProvider.Initialize(YAMLLoader);
-			endPointCategoryRawProvider.Initialize(YAMLLoader);
-			capabilityClassRawProvider.Initialize(YAMLLoader);
-
-			var inboundProvider = new InboundConfigurationProvider(inboundRawProvider);
-			services.AddSingleton(inboundProvider);
-			var networkProfileProvider = new NetworkProfileProvider(networkProfileRawProvider);
-			services.AddSingleton(networkProfileProvider);
-			var endPointCategoryProvider = new EndPointCategoriesProvider(endPointCategoryRawProvider);
-			services.AddSingleton(endPointCategoryProvider);
-			var capabilityClassProvider = new CapabilityClassProvider(capabilityClassRawProvider);
-			services.AddSingleton(capabilityClassProvider);
-
-			internetAccessPointRawProvider.Initialize(YAMLLoader, networkProfileProvider);
-			var internetAccessPointProvider = new InternetAccessPointProvider(internetAccessPointRawProvider, networkProfileProvider);
-			services.AddSingleton(internetAccessPointProvider);
-
-			endPointRoutingConfigurationRawProvider.Initialize(YAMLLoader, internetAccessPointProvider);
-			var endPointRoutingConfigurationProvider = new EndPointRoutingConfigurationProvider(endPointRoutingConfigurationRawProvider);
-			services.AddSingleton(endPointRoutingConfigurationProvider);
-
-			routingRuleRawProvider.Initialize(YAMLLoader, endPointRoutingConfigurationProvider);
-			var routingGridProvider = new RoutingRulesProvider(routingRuleRawProvider);
-			services.AddSingleton(routingGridProvider);
-
-			apiConfigurationRawProvider.Initialize(YAMLLoader);
-			var apiConfigurationProvider = new APIConfigurationProvider(apiConfigurationRawProvider);
-			services.AddSingleton(apiConfigurationProvider);
-
-			services.AddSingleton(settingsFileHolder);
-		}
-		catch (Exception ex)
-		{
-			if (readBackupSettingsFile)
-				throw;
-			else
-			{
-				Console.WriteLine(ex);
-				readBackupSettingsFile = true;
-				goto retryLoadSettings;
-			}
-		}
+			var loader = new SettingsLoader(Options.Create(new SettingsLoader.Options()));
+			await loader.LoadSettingsAsync(fileSystemLocator, services);
+		});
 	}
 }

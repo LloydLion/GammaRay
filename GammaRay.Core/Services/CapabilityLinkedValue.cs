@@ -5,6 +5,8 @@ public abstract class CapabilityLinkedValue
 	public static CapabilityLinkedValue Constant(string value) => new ConstantValue(value);
 
 	public static CapabilityLinkedValue Property(string propertyName) => new PropertyValue(propertyName);
+	
+	public static CapabilityLinkedValue FromString(string stringValue) => stringValue.StartsWith('.') ? Property(stringValue[1..]) : Constant(stringValue);
 
 	public abstract string GetValue(Capability capability);
 

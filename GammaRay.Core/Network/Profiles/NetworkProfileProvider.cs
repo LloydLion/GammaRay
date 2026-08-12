@@ -1,4 +1,4 @@
-using GammaRay.Core.Settings;
+using GammaRay.Core.Settings.Model;
 
 namespace GammaRay.Core.Network.Profiles;
 
@@ -7,9 +7,9 @@ public sealed class NetworkProfileProvider
 	public const string DefaultProfileName = "default";
 
 
-	public NetworkProfileProvider(IRawSettingsProvider<IReadOnlyCollection<NetworkProfile>> rawProvider)
+	public NetworkProfileProvider(SettingsModelRoot modelRoot)
 	{
-		var rawProfiles = rawProvider.Get();
+		var rawProfiles = modelRoot.NetworkProfiles.Select(cm => new NetworkProfile(cm.Key)).ToArray();
 
 		if (rawProfiles.Any(s => s.Name == DefaultProfileName))
 			throw new ArgumentException($"Profile name '{DefaultProfileName}' is reserved");
