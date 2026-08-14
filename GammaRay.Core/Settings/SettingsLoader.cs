@@ -88,9 +88,9 @@ public class SettingsLoader(IOptions<SettingsLoader.Options> options)
 
 	public class Options
 	{
-		public string SourceFileDirectory { get; init; } = ".";
+		public string SourceFileDirectory { get; init; } = "./settings/";
 
-		public string BackupSourceFileDirectory { get; init; } = "./settingsBackup";
+		public string BackupSourceFileDirectory { get; init; } = "./settings/backup/";
 
 		public string FileExtensionFilter { get; init; } = "yaml";
 

@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\GammaRay.Server.Core\GammaRay.Server.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="settings\**\*" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+</Project>

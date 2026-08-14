@@ -123,7 +123,11 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 	{
 		public TimeSpan UpdatePeriod { get; init; } = TimeSpan.FromSeconds(5);
 
-		public int WAQSize { get; init; } = 5;
+		public int WAQSize { get; init; } = 3;
+
+		public int WAQSuccessToAdmitAvailable { get; init; } = 3;
+		
+		public int WAQSuccessToAdmitUnavailable { get; init; } = 1;
 
 		public TimeSpan TestResultTTL { get; init; } = TimeSpan.FromMinutes(20);
 
@@ -250,11 +254,11 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 				var successInWAQ = _waq.CountSuccessTests();
 				if (_waq.Buffer.IsFull)
 				{
-					if (successInWAQ is <= 2 && _available == true)
+					if (successInWAQ <= _owner._options.WAQSuccessToAdmitUnavailable && _available == true)
 					{
 						_available = false;
 					}
-					else if (successInWAQ is >= 4 && _available == false)
+					else if (successInWAQ >= _owner._options.WAQSuccessToAdmitAvailable && _available == false)
 					{
 						_available = true;
 

@@ -112,7 +112,8 @@ public sealed class HTTPInboundDriver(
 						// -- Read HTTP header for proxy
 						var rawHeader = await HttpMessageHeader.ReadRawHeaderAsync(clientContext.Socket);
 						if (rawHeader.Length == 0)
-							return;
+							throw new Exception("Client does not send valid HTTP header");
+						
 						var header = HttpRequestHeader.Parse(rawHeader);
 						var destinationEndPoint = header.Uri.EndPoint;
 						destinationEndPoint ??= GenericWebEndPoint.Parse(header.Headers.TryGetSingle("Host")

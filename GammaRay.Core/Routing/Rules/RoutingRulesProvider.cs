@@ -13,7 +13,7 @@ public class RoutingRulesProvider
 		{
 			EndPointCategoryCondition = cm.EndPointCategory?.Select((EndPointCategory c) => c.Name) ??
 				(ValueCondition<EndPointCategory>)NoneValueCondition<EndPointCategory>.AlwaysTrue,
-			NetworkProfileCondition = cm.EndPointCategory?.Select((NetworkProfile c) => c.Name) ?? 
+			NetworkProfileCondition = cm.NetworkProfile?.Select((NetworkProfile c) => c.Name) ?? 
 				(ValueCondition<NetworkProfile>)NoneValueCondition<NetworkProfile>.AlwaysTrue
 		});
 		Rules = rules.ToArray();

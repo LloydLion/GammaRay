@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <DefineConstants Condition="'$(Configuration)'=='DEBUG'">$(DefineConstants);EnableConsoleMonitoringByDefault</DefineConstants>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <ProjectReference Condition="'$(UseOSSpecificComponents)' == 'Windows'"
+      Include="..\..\GammaRay.Core.OSSpecific.Windows\GammaRay.Core.OSSpecific.Windows.csproj" />
+    <ProjectReference Include="..\..\GammaRay.Core\GammaRay.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <Target Name="AddUseWindowsComponentsDefine" BeforeTargets="CoreCompile">
+    <PropertyGroup Condition="'$(UseOSSpecificComponents)' == 'Windows'">
+      <DefineConstants>$(DefineConstants);UseWindowsSpecificComponents</DefineConstants>
+    </PropertyGroup>
+  </Target>
+</Project>

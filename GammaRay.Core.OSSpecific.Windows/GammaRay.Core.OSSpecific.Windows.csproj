@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup Condition="'$(BuildAsExecutable)' == 'true'">
+    <OutputType>exe</OutputType>
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishAot>true</PublishAot>
+    <DefineConstants>$(DefineConstants);BuildAsExecutable</DefineConstants>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\GammaRay.Core\GammaRay.Core.csproj" />
+  </ItemGroup>
+</Project>

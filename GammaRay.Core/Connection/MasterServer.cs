@@ -141,7 +141,7 @@ public sealed class MasterServer(
 			var connection = new ClientConnection(new(remoteEndPoint, _inbound), _owner._monitoringSystem, Guid.NewGuid(), now);
 
 			var report = new NewConnectionReport(remoteEndPoint, _inbound.Name);
-		#if ENABLE_PID_GATHER
+		#if EnablePIDGather
 			report.PID = TcpProcessLookup.GetProcessIdByLocalPort(remoteEndPoint.Port);
 		#endif
 			connection.Procedure.CommitReport(report);
@@ -224,7 +224,7 @@ public sealed class MasterServer(
 
 		public ReportProperty<string> Inbound { get; set; } = inbound;
 
-	#if ENABLE_PID_GATHER
+	#if EnablePIDGather
 		public ReportProperty<int> PID { get; set; }
 	#endif
 	}

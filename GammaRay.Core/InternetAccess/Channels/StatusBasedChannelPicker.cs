@@ -19,6 +19,9 @@ public sealed class StatusBasedChannelPicker(IIAPChannelMonitor _monitor) : IIAP
 
 
 		(IAPChannelStatus Status, IAPChannel Channel)? bestChannel = null;
+		
+		bool useLifetime = true; 
+	retry:
 
 		foreach (var channel in accessPoint.Channels.Values)
 		{
@@ -32,9 +35,18 @@ public sealed class StatusBasedChannelPicker(IIAPChannelMonitor _monitor) : IIAP
 
 			if (status.CharacteristicAccessTime == TimeSpan.MaxValue)
 				continue;
+			
+			if (useLifetime && status.AverageLifeTime <= TimeSpan.FromMinutes(10))
+				continue;
 
 			if (bestChannel is null || status.CharacteristicAccessTime <= bestChannel.Value.Status.CharacteristicAccessTime)
 				bestChannel = (status, channel);
+		}
+
+		if (bestChannel is null && useLifetime)
+		{
+			useLifetime = false;
+			goto retry;
 		}
 
 		return bestChannel;

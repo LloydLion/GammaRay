@@ -9,7 +9,7 @@ indent_size = 4
 end_of_line = crlf
 insert_final_newline = true
 
-[*.{csproj,slnx,xml}]
+[*.{csproj,slnx,xml,pubxml,props}]
 indent_size = 2
 indent_style = space
 

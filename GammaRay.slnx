@@ -1,16 +1,27 @@
 <Solution>
-  <Folder Name="/Solution Items/">
+  <Folder Name="/ Solution Items/">
     <File Path=".editorconfig" />
     <File Path=".gitignore" />
-    <File Path="SingleFileApp1.cs" />
   </Folder>
-  <Folder Name="/Solution Items/Benchmarks/">
+  <Folder Name="/ Solution Items/Benchmarks/">
     <File Path="Benchmarks/ConfigurationLodingBenchmark.cs" />
   </Folder>
-  <Project Path="GammaRay.Client.GUI.Desktop/GammaRay.Client.GUI.Desktop.csproj" />
-  <Project Path="GammaRay.Client.GUI/GammaRay.Client.GUI.csproj" />
-  <Project Path="GammaRay.Client.TUI/GammaRay.Client.TUI.csproj" />
-  <Project Path="GammaRay.Console/GammaRay.Console.csproj" />
-  <Project Path="GammaRay.Core.Windows/GammaRay.Core.Windows.csproj" />
+  <Folder Name="/ Solution Items/MSBuild/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  
+  <Folder Name="/Client/">
+    <Project Path="Client/GammaRay.Client.Core/GammaRay.Client.Core.csproj" />
+    <Project Path="Client/GammaRay.Client.GUI.Desktop/GammaRay.Client.GUI.Desktop.csproj" />
+    <Project Path="Client/GammaRay.Client.GUI/GammaRay.Client.GUI.csproj" />
+  </Folder>
+  
+  <Folder Name="/Server/">
+    <Project Path="Server/GammaRay.Server.Console/GammaRay.Server.Console.csproj" />
+    <Project Path="Server/GammaRay.Server.Core/GammaRay.Server.Core.csproj" />
+  </Folder>
+  
   <Project Path="GammaRay.Core/GammaRay.Core.csproj" />
+  <Project Path="GammaRay.Core.OSSpecific.Windows/GammaRay.Core.OSSpecific.Windows.csproj" />
 </Solution>
