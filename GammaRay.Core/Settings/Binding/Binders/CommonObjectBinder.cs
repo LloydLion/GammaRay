@@ -1,21 +1,24 @@
+using System.Collections;
 using GammaRay.Core.Settings.Tree;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using GammaRay.Core.Utils.Result;
 
 namespace GammaRay.Core.Settings.Binding.Binders;
 
 public sealed class CommonObjectBinder : SettingsTreeTypeBinder
 {
-	public override bool Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder, [NotNullWhen(true)] out object? result)
+	public override SettingsTreeBindResult Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder)
 	{
-		result = null;
 		var defaultCtor = type.GetConstructor([]) ?? throw new ArgumentException("Type does not have a parameterless constructor", nameof(type));
 
 		if (node is not SettingsTreeMappingNode mappingNode)
-			return false;
+			return SettingsTreeBindError.Single("Must be mapping node", node);
 
-		result = defaultCtor.Invoke([]);
+		var result = defaultCtor.Invoke([]);
+
+		var errors = new SettingsTreeBindErrorCollection();
 
 		foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public))
 		{		
@@ -23,20 +26,29 @@ public sealed class CommonObjectBinder : SettingsTreeTypeBinder
 
 			if (mappingNode.Children.TryGetValue(field.Name, out var fieldValueNode) == false)
 			{
-				if (isRequired) return false;
-				else continue;
+				if (isRequired)
+					errors.Add(SettingsTreeBindError.Single($"Required field '{field.Name}' missing", node));
+				continue;
 			}
 
-			var fieldValue = aggregateBinder.Bind(field.FieldType, fieldValueNode);
+			var fieldValueResult = aggregateBinder.Bind(field.FieldType, fieldValueNode);
 
-			field.SetValue(result, fieldValue);
+			if (fieldValueResult.TryI(out var error, out var fieldValue))
+				errors.Add(error);
+			else field.SetValue(result, fieldValue);
 		}
 
-		return true;
+		if (errors.And(out var finalError))
+			return finalError;
+		
+		return SettingsTreeBindResult.Success(result);
 	}
 
 	public override bool CanBind(Type type, SettingsTreeAggregateBinder aggregateBinder)
 	{
-		return type.IsValueType == false && type.IsArray == false && type.IsAbstract == false && type.GetConstructor([]) is not null;
+		return 
+			type is { IsValueType: false, IsArray: false, IsAbstract: false } &&
+			type.GetConstructor([]) is not null &&
+			type.IsAssignableTo(typeof(IEnumerable)) == false;
 	}
 }

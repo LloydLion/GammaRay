@@ -6,9 +6,8 @@ public class StringSettingsTreeValueParser : ISettingsTreeValueParser
 {
 	public bool CanParse(Type type, SettingsTreeAggregateBinder aggregateBinder) => typeof(string) == type;
 
-	public bool TryParse(Type type, ReadOnlySpan<char> value, SettingsTreeAggregateBinder aggregateBinder, [NotNullWhen(true)] out object? result)
+	public SettingsTreeValueParseResult TryParse(Type type, ReadOnlySpan<char> value, SettingsTreeAggregateBinder aggregateBinder)
 	{
-		result = new string(value);
-		return true;
+		return SettingsTreeValueParseResult.Success(new string(value));
 	}
 }

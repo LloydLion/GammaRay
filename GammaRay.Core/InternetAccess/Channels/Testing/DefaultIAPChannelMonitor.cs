@@ -124,6 +124,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		public TimeSpan UpdatePeriod { get; init; } = TimeSpan.FromSeconds(5);
 
 		public int WAQSize { get; init; } = 3;
+		
 
 		public int WAQSuccessToAdmitAvailable { get; init; } = 3;
 		

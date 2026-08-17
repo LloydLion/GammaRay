@@ -7,19 +7,20 @@ namespace GammaRay.Core.Settings.Binding.Binders.Special;
 
 public sealed class SettingsInternetAccessPointModelChannelBinder : SettingsTreeTypeBinder
 {
-	public override bool Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder, [NotNullWhen(true)] out object? result)
+	public override SettingsTreeBindResult Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder)
 	{
-		result = null;
 		if (
 			node is not SettingsTreeMappingNode mappingNode ||
 			mappingNode.Children.TryGetValue("uri", out var uriNode) ||
 			uriNode is not SettingsTreeValueNode uriValueNode ||
 			uriValueNode.Value is null
 		)
-			return false;
+			return SettingsTreeBindError.Single("Must be mapping node with not null valued 'uri' property", node);
 
-
-		var uri = new Uri(uriValueNode.Value);
+		if (aggregateBinder.Bind(typeof(Uri), uriValueNode).TryI(out var error, out var result))
+			return error;
+		var uri = (Uri)result;
+		
 		var protocol = uri.Scheme;
 		var endPoint = new GenericWebEndPoint(new WebHost(uri.Host), uri.Port);
 		var parameters = uri.Query.TrimStart('?').Split('&').Select(s => s.Split('=')).ToDictionary(s => s[0], s => s[1]);
@@ -27,13 +28,20 @@ public sealed class SettingsInternetAccessPointModelChannelBinder : SettingsTree
 		var channel = new SettingsInternetAccessPointModel.Channel() { EndPoint = endPoint, Protocol = protocol, Parameters = new(parameters) };
 
 		if (mappingNode.Children.TryGetValue("tags", out var tagsNode))
-			channel.Tags = aggregateBinder.Bind<string[]>(tagsNode);
+		{
+			if (aggregateBinder.Bind(typeof(string[]), tagsNode).TryI(out error, out var channelTags))
+				return error;
+			channel.Tags = (string[])channelTags;
+		}
 
 		if (mappingNode.Children.TryGetValue("availableInNetwork", out var availableInNetworkNode))
-			channel.AvailableInNetwork = aggregateBinder.Bind<string[]>(availableInNetworkNode);
+		{
+			if (aggregateBinder.Bind(typeof(string[]), availableInNetworkNode).TryI(out error, out var availableInNetwork))
+				return error;
+			channel.AvailableInNetwork = (string[])availableInNetwork;
+		}
 
-		result = channel;
-		return true;
+		return SettingsTreeBindResult.Success(channel);
 	}
 
 	public override bool CanBind(Type type, SettingsTreeAggregateBinder aggregateBinder)

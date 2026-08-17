@@ -5,24 +5,28 @@ namespace GammaRay.Core.Settings.Binding.Binders;
 
 public sealed class ArrayBinder : SettingsTreeTypeBinder
 {
-	public override bool Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder, [NotNullWhen(true)] out object? result)
+	public override SettingsTreeBindResult Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder)
 	{
 		var elementType = type.GetElementType() ?? throw new ArgumentException("Type must be array", nameof(type));
 
-		result = null;
 		if (node is not SettingsTreeListNode listNode)
-			return false;
+			return SettingsTreeBindError.Single("Must be list node", node);
 
+		var errors = new SettingsTreeBindErrorCollection();
+		
 		var size = listNode.Children.Count;
 		var array = Array.CreateInstance(elementType, size);
 		for (int i = 0; i < size; i++)
 		{
-			var el = aggregateBinder.Bind(elementType, listNode.Children[i]);
-			array.SetValue(el, i);
+			var elementBindResult = aggregateBinder.Bind(elementType, listNode.Children[i]);
+			if (elementBindResult.TryI(out var error, out var el))
+				errors.Add(error);
+			else array.SetValue(el, i);
 		}
 
-		result = array;
-		return true;
+		if (errors.And(out var finalError))
+			return finalError;
+		return SettingsTreeBindResult.Success(array);
 	}
 
 	public override bool CanBind(Type type, SettingsTreeAggregateBinder aggregateBinder)

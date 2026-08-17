@@ -3,15 +3,19 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace GammaRay.Core.Settings.Binding.Binders;
 
-public sealed class ParsePrimitiveBinder() : SettingsTreeTypeBinder
+public sealed class ParsePrimitiveBinder : SettingsTreeTypeBinder
 {
-	public override bool Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder, [NotNullWhen(true)] out object? result)
+	public override SettingsTreeBindResult Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder)
 	{
-		result = null;
 		if (node is not SettingsTreeValueNode valueNode || valueNode.Value is null)
-			return false;
+			return SettingsTreeBindError.Single("Must be value node with not null value", node);
 
-		return aggregateBinder.Parsers.First(s => s.CanParse(type, aggregateBinder)).TryParse(type, valueNode.Value, aggregateBinder, out result);
+		return aggregateBinder.Parsers.First(s => s.CanParse(type, aggregateBinder))
+			.TryParse(type, valueNode.Value, aggregateBinder)
+			.Match(
+				SettingsTreeBindResult.Success,
+				message => SettingsTreeBindError.Single(message, node)
+			);
 	}
 
 	public override bool CanBind(Type type, SettingsTreeAggregateBinder aggregateBinder)

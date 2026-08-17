@@ -29,44 +29,17 @@ public class SettingsLoader(IOptions<SettingsLoader.Options> options)
 	
 	public async ValueTask LoadSettingsAsync(IFileSystemLocator fileSystem, IServiceCollection output)
 	{
-		var shouldLoadBackup = false;
-	retry:
-		try
-		{
-			string basePath = shouldLoadBackup ? _options.BackupSourceFileDirectory : _options.SourceFileDirectory;
-		
-			var filePath = Path.Combine(basePath, SettingsFileName + _options.FileExtensionFilter);
-			var fileContent = await fileSystem.GetFileContentAsync(filePath) ?? throw new FileNotFoundException(filePath);
-		
-			var treeLoader = TreeLoaders[_options.TreeLoaderType];
+		var filePath = Path.Combine(_options.SourceFileDirectory, SettingsFileName + _options.FileExtensionFilter);
+		var fileContent = await fileSystem.GetFileContentAsync(filePath) ?? throw new FileNotFoundException(filePath);
+	
+		var treeLoader = TreeLoaders[_options.TreeLoaderType];
 
-			var tree = treeLoader.LoadTree(fileContent);
+		var tree = treeLoader.LoadTree(fileContent);
 
-			var binder = SettingsTreeAggregateBinderSource.Create(fileSystem);
-			var modelRoot = binder.Bind<SettingsModelRoot>(tree.Root);
+		var binder = SettingsTreeAggregateBinderSource.Create(fileSystem);
+		var modelRoot = binder.BindTree<SettingsModelRoot>(tree);
 
-			CreateProviders(output, modelRoot);
-		}
-		catch (Exception ex)
-		{
-			Console.WriteLine(ex);
-			if (shouldLoadBackup)
-				throw;
-
-			shouldLoadBackup = true;
-			goto retry;
-		}
-		
-		// Make backup in case of success main config load
-		if (shouldLoadBackup == false)
-			try
-			{
-				var mainFilePath = Path.Combine(_options.SourceFileDirectory, SettingsFileName + _options.FileExtensionFilter);
-				var backupFilePath = Path.Combine(_options.BackupSourceFileDirectory, SettingsFileName + _options.FileExtensionFilter);
-				var mainFileContent = await fileSystem.GetFileContentAsync(mainFilePath) ?? throw new FileNotFoundException(mainFilePath);
-				await fileSystem.SetFileContentAsync(backupFilePath, mainFileContent);
-			}
-			catch(Exception ex) { Debugger.BreakForUserUnhandledException(ex); }
+		CreateProviders(output, modelRoot);
 	}
 
 	private static void CreateProviders(IServiceCollection output, SettingsModelRoot modelRoot)
@@ -89,8 +62,6 @@ public class SettingsLoader(IOptions<SettingsLoader.Options> options)
 	public class Options
 	{
 		public string SourceFileDirectory { get; init; } = "./settings/";
-
-		public string BackupSourceFileDirectory { get; init; } = "./settings/backup/";
 
 		public string FileExtensionFilter { get; init; } = "yaml";
 

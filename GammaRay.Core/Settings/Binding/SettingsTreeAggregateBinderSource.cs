@@ -25,6 +25,7 @@ public static class SettingsTreeAggregateBinderSource
 				new StringSettingsTreeValueParser(),
 				new EnumSettingsTreeValueParser(),
 				new ValueConditionValueParser(),
+				new UriTreeValueParser(),
 				new SettingsLinkedFileValueParser(fileSystem)
 			]
 		);

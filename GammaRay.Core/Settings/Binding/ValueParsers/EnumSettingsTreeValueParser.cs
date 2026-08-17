@@ -1,14 +1,14 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace GammaRay.Core.Settings.Binding.ValueParsers;
 
 public class EnumSettingsTreeValueParser : ISettingsTreeValueParser
 {
 	public bool CanParse(Type type, SettingsTreeAggregateBinder aggregateBinder) => type.IsEnum;
 
-	public bool TryParse(Type type, ReadOnlySpan<char> value, SettingsTreeAggregateBinder aggregateBinder, [NotNullWhen(true)] out object? result)
+	public SettingsTreeValueParseResult TryParse(Type type, ReadOnlySpan<char> value, SettingsTreeAggregateBinder aggregateBinder)
 	{
-		result = Enum.Parse(type, value, ignoreCase: true);
-		return true;
+		if (Enum.TryParse(type, value, ignoreCase: true, out var result))
+			return SettingsTreeValueParseResult.Success(result);
+		
+		return SettingsTreeValueParseResult.Failure($"Invalid enum value: {value}, allowed: {string.Join(", ", Enum.GetNames(type))}");
 	}
 }

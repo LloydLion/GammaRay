@@ -7,17 +7,21 @@ namespace GammaRay.Core.Settings.Binding.Binders.Special;
 
 public sealed class SettingsInboundModelBinder : SettingsTreeTypeBinder
 {
-	public override bool Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder, [NotNullWhen(true)] out object? result)
+	public override SettingsTreeBindResult Bind(SettingsTreeNode node, Type type, SettingsTreeAggregateBinder aggregateBinder)
 	{
-		result = null;
-		if (node is not SettingsTreeValueNode valueNode || valueNode.Value is null)
-			return false;
-
-		var uri = new Uri(valueNode.Value);
+		if (aggregateBinder.Bind(typeof(Uri), node).TryI(out var error, out var result))
+			return error;
+		var uri = (Uri)result;
+		
 		var protocol = uri.Scheme;
-		var endPoint = new IPEndPoint(IPAddress.Parse(uri.Host), uri.Port);
-		result = new SettingsInboundModel() { Protocol = protocol, EndPoint = endPoint };
-		return true;
+
+		if (IPAddress.TryParse(uri.Host, out var ipAddress) == false)
+			return SettingsTreeBindError.Single("Uri host must be valid IP address", node);
+		
+		var endPoint = new IPEndPoint(ipAddress, uri.Port);
+		
+		var model = new SettingsInboundModel() { Protocol = protocol, EndPoint = endPoint };
+		return SettingsTreeBindResult.Success(model);
 	}
 
 	public override bool CanBind(Type type, SettingsTreeAggregateBinder aggregateBinder)

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using GammaRay.Core.Settings.Binding.ValueParsers;
 using GammaRay.Core.Settings.Tree;
 
@@ -8,23 +9,28 @@ public class SettingsTreeAggregateBinder(IReadOnlyList<SettingsTreeTypeBinder> _
 	public IReadOnlyList<ISettingsTreeValueParser> Parsers { get; } = _parsers.ToArray();
 
 
-	public TModel Bind<TModel>(SettingsTreeNode node) => (TModel)Bind(typeof(TModel), node);
+	public TModel BindTree<TModel>(SettingsTree tree) => (TModel)Bind(typeof(TModel), tree.Root).Throws(tree);
 
-	public object Bind(Type type, SettingsTreeNode node)
+	public SettingsTreeBindResult Bind(Type type, SettingsTreeNode node)
 	{
 		var availableBinders = _binders.Where(b => b.CanBind(type, this)).ToArray();
 
 		if (availableBinders.Length == 0)
 			throw new InvalidOperationException($"No binder available for type {type.FullName}");
 
+		var errors = new SettingsTreeBindErrorCollection();
+		
 		foreach (var binder in availableBinders)
 		{
-			if (binder.Bind(node, type, this, out var result))
-			{
+			var result = binder.Bind(node, type, this);
+			if (result.Try(out var error, out _))
 				return result;
-			}
+			
+			errors.Add(error);
 		}
 
-		throw new Exception("TODO: invalid settings handling");
+		if (errors.Or(out var finalError))
+			return finalError;
+		throw new UnreachableException();
 	}
 }

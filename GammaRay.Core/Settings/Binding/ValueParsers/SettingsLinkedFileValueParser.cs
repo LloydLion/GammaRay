@@ -7,16 +7,15 @@ namespace GammaRay.Core.Settings.Binding.ValueParsers;
 
 public sealed class SettingsLinkedFileValueParser(IFileSystemLocator _fileSystem) : ISettingsTreeValueParser
 {
-	public bool TryParse(Type type, ReadOnlySpan<char> value, SettingsTreeAggregateBinder aggregateBinder, [NotNullWhen(true)] out object? result)
+	public SettingsTreeValueParseResult TryParse(Type type, ReadOnlySpan<char> value, SettingsTreeAggregateBinder aggregateBinder)
 	{
-		result = null;
 		var path = new string(value);
 		var content = AsyncContext.Run(() => _fileSystem.GetFileContentAsync(path).AsTask());
+		
 		if (content is null)
-			return false;
+			return SettingsTreeValueParseResult.Failure($"File '{path}' not found");
 
-		result = new SettingsLinkedFile(path, content);
-		return true;
+		return SettingsTreeValueParseResult.Success(new SettingsLinkedFile(path, content));
 	}
 
 	public bool CanParse(Type type, SettingsTreeAggregateBinder aggregateBinder)
