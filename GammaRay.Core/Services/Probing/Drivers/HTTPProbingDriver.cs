@@ -3,21 +3,20 @@ using GammaRay.Core.Network;
 using GammaRay.Core.Network.Flow;
 using GammaRay.Core.Protocols.TLS;
 using GammaRay.Core.Utils;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Security.Authentication;
+using GammaRay.Core.Protocols.HTTP;
 
 namespace GammaRay.Core.Services.Probing.Drivers;
 
 [RecommendedDriverName("HTTP")]
 public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 {
-	private readonly ConnectCallbackSource _connectCallbackSource = new();
 	private readonly SemaphoreSlim _sync = new(1);
-	private HttpClient? _client;
+	private readonly HttpClientWrapper _client = new();
 
 
 	public async Task<ProbeResult> ProbeAsync(ProbingArgs args)
@@ -51,11 +50,10 @@ public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 		await _sync.WaitAsync();
 		try
 		{
-			CreateClientIfNeed();
-			using var connectCallbackConfiguration = _connectCallbackSource.Configure(streamDataFlow, endPoint);
-			_connectCallbackSource.FlowWrapper.WritingOptions = writingOptions;
-			_connectCallbackSource.FlowWrapper.ReadingOptions = readingOptions;
-
+			using var connectCallbackConfiguration = _client.Configure(streamDataFlow, endPoint);
+			_client.SetReadingOptions(readingOptions);
+			_client.SetWritingOptions(writingOptions);
+			
 			var baseUri = new Uri($"http://{endPoint.Host.Domain}:{endPoint.Port}/");
 			var uri = new Uri(baseUri, $"{strongParameters.Path}");
 			for (int redirections = 0; redirections != strongParameters.MaxRedirectCount + 1; redirections++)
@@ -65,7 +63,7 @@ public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 				request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));
 				request.Headers.Connection.Add("keep-alive");
 
-				using var response = await _client.SendAsync(request);
+				using var response = await _client.AccessClient().SendAsync(request);
 
 				if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.UnavailableForLegalReasons)
 					return result.L7Failure(ProbeResult.CommunicationStatus.RemoteServerBan, "Server returned 403 or 451 status code");
@@ -92,7 +90,7 @@ public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 
 				await using var responseStream = await response.Content.ReadAsStreamAsync();
 
-				_connectCallbackSource.FlowWrapper.ReadingOptions = readingOptions with { Timeout = options.ContinuousDataTimeout };
+				_client.SetReadingOptions(readingOptions with { Timeout = options.ContinuousDataTimeout });
 
 				var buffer = new byte[1024];
 				while (true)
@@ -142,25 +140,9 @@ public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 		return new StrongParameters(useTLS, path, method, userAgent, requireNonErrorStatusCode, maxRedirectCount);
 	}
 
-	[MemberNotNull(nameof(_client))]
-	private void CreateClientIfNeed()
-	{
-		_client = new HttpClient(new SocketsHttpHandler()
-		{
-			ConnectCallback = _connectCallbackSource.Callback,
-			AllowAutoRedirect = false,
-			EnableMultipleHttp2Connections = false,
-			EnableMultipleHttp3Connections = false,
-			UseCookies = false,
-			UseProxy = false,
-			PooledConnectionLifetime = TimeSpan.Zero,
-			PooledConnectionIdleTimeout = TimeSpan.Zero,
-		}, disposeHandler: true);
-	}
-
 	public void Dispose()
 	{
-		_client?.Dispose();
+		_client.Dispose();
 	}
 
 
@@ -203,55 +185,6 @@ public sealed class HTTPProbingDriver : IProbeDriver, IDisposable
 				{ FailureComment = comment };
 			_report.Result = result;
 			return result;
-		}
-	}
-
-	private class ConnectCallbackSource
-	{
-		private DataFlowStreamWrapper _wrapper = new();
-#if DEBUG
-		private WebEndPoint? _targetEndPoint = null;
-#endif
-
-
-		public ValueTask<Stream> Callback(SocketsHttpConnectionContext ctx, CancellationToken _)
-		{
-			if (_wrapper is null)
-				throw new InvalidOperationException("Set data flow first");
-#if DEBUG
-			if (_targetEndPoint is not null)
-			{
-				Debug.Assert(ctx.DnsEndPoint.Port == _targetEndPoint.Value.Port);
-				Debug.Assert(ctx.DnsEndPoint.Host == _targetEndPoint.Value.Host);
-			}
-#endif
-			return ValueTask.FromResult<Stream>(_wrapper);
-		}
-
-		public ConfigurationHandle Configure(IStreamDataFlow dataFlow, WebEndPoint? targetEndPoint)
-		{
-			if (_wrapper is not null)
-				_wrapper.ReInit(dataFlow);
-			else _wrapper = new DataFlowStreamWrapper(dataFlow);
-#if DEBUG
-			_targetEndPoint = targetEndPoint;
-#endif
-			return new(this);
-		}
-
-
-		public DataFlowStreamWrapper FlowWrapper => _wrapper;
-
-
-		public readonly struct ConfigurationHandle(ConnectCallbackSource source) : IDisposable
-		{
-			public void Dispose()
-			{
-				source._wrapper.ReInit(newDataFlow: null);
-#if DEBUG
-				source._targetEndPoint = null;
-#endif
-			}
 		}
 	}
 }

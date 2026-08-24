@@ -59,7 +59,7 @@ public sealed class IAPChannelSimpleTester(
 
 			var rawResponse = await HttpMessageHeader.ReadRawHeaderAsync(dataFlow, new DataFlowReadingOptions());
 			var response = HttpResponseHeader.Parse(rawResponse);
-			if (response.Code != 204)
+			if (response.Code / 100 is not 2)
 				return false;
 		}
 

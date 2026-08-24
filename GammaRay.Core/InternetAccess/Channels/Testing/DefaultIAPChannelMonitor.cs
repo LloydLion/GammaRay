@@ -18,6 +18,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 	private readonly INetworkIdentifier _networkIdentifier;
 	private readonly INetworkProfileMappingRepository _networkProfileMapping;
 	private readonly IIAPChannelSimpleTester _simpleChannelTester;
+	private readonly IIAPChannelHardTester _hardChannelTester;
 	private readonly MonitoringSystem _monitoringSystem;
 	private readonly Options _options;
 	private ActivationContext? _act;
@@ -33,6 +34,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		INetworkProfileMappingRepository networkProfileMapping,
 
 		IIAPChannelSimpleTester simpleChannelTester,
+		IIAPChannelHardTester hardChannelTester,
 		InternetAccessPointProvider internetAccessPointProvider,
 
 		IOptions<Options> options,
@@ -44,6 +46,7 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		_networkIdentifier = networkIdentifier;
 		_networkProfileMapping = networkProfileMapping;
 		_simpleChannelTester = simpleChannelTester;
+		_hardChannelTester = hardChannelTester;
 		_monitoringSystem = monitoringSystem;
 		_options = options.Value;
 		_channelWorkers =
@@ -125,7 +128,6 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 
 		public int WAQSize { get; init; } = 3;
 		
-
 		public int WAQSuccessToAdmitAvailable { get; init; } = 3;
 		
 		public int WAQSuccessToAdmitUnavailable { get; init; } = 1;
@@ -141,6 +143,8 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		public TimeSpan TestTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
 		public TimeSpan AvailabilityLogCutOff { get; init; } = TimeSpan.FromHours(1);
+
+		public TimeSpan HardTestMinInterval { get; init; } = TimeSpan.FromMinutes(10);
 	}
 
 	private record ActivationContext(ITimer UpdateTimer, SynchronizationContext CapturedSynchronizationContext);
@@ -156,6 +160,8 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 		private int _ignoreWAQElements = 0;
 		private int _skippedUpdatesCounter = 0;
 		private bool _privileged = false;
+		private long _hardTestCacheExpireTime = 0;
+		private bool _lastHardTestResult = false;
 
 
 		public IAPChannelStatus Status { get; private set; }
@@ -234,7 +240,6 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 			var procedure = TrackableProcedure.New("Testing", _owner._timeProvider, _owner._monitoringSystem);
 			try
 			{
-				
 				var testResult = await PerformTestAsync(procedure);
 
 				if (!CheckNetwork()) return;
@@ -251,29 +256,22 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 						_observationRow.Push(displacedTestResult.Value);
 					}
 				}
-
+				
 				var successInWAQ = _waq.CountSuccessTests();
-				if (_waq.Buffer.IsFull)
+				
+				var availabilityDecision = MakeAvailabilityDecision(successInWAQ);
+				switch (availabilityDecision)
 				{
-					if (successInWAQ <= _owner._options.WAQSuccessToAdmitUnavailable && _available == true)
-					{
-						_available = false;
-					}
-					else if (successInWAQ >= _owner._options.WAQSuccessToAdmitAvailable && _available == false)
-					{
-						_available = true;
-
-						// Ignore all pending failed tests
-						var addToWAQIgnore = 0;
-						for (int i = 1; i <= _waq.Buffer.Size; i++)
+					case AvailabilityDecision.TryMakeAvailable:
+						if (await CheckIfCanMakeAvailableAsync(procedure))
 						{
-							var test = _waq.Buffer[-i];
-							if (test.IsSuccess == false)
-								addToWAQIgnore++;
-							else break;
+							IgnoreAllPendingFailedTests();
+							_available = true;
 						}
-						_ignoreWAQElements += addToWAQIgnore;
-					}
+						break;
+					case AvailabilityDecision.MakeUnavailable:
+						_available = false;
+						break;
 				}
 
 				AvailabilityLog.Log(_available);
@@ -316,6 +314,19 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 
 		private bool CheckNetwork() => _owner._networkProfileMapping.GetProfileForOrNull(_owner._networkIdentifier.CurrentIdentity) == _network;
 
+		private AvailabilityDecision MakeAvailabilityDecision(int successInWAQ)
+		{
+			if (_waq.Buffer.IsFull == false)
+				return AvailabilityDecision.DoNotChange;
+			
+			if (successInWAQ <= _owner._options.WAQSuccessToAdmitUnavailable && _available == true)
+				return AvailabilityDecision.MakeUnavailable;
+			if (successInWAQ >= _owner._options.WAQSuccessToAdmitAvailable && _available == false)
+				return AvailabilityDecision.TryMakeAvailable;
+
+			return AvailabilityDecision.DoNotChange;
+		}
+
 		private async ValueTask<TestResult> PerformTestAsync(TrackableProcedure monitoring)
 		{
 			var start = _owner._timeProvider.GetTimestamp();
@@ -334,6 +345,48 @@ public sealed class DefaultIAPChannelMonitor : IIAPChannelMonitor, IDisposable
 			var duration = _owner._timeProvider.GetElapsedTime(start);
 
 			return new TestResult(success ? duration : null, start);
+		}
+
+		private async ValueTask<bool> CheckIfCanMakeAvailableAsync(TrackableProcedure monitoring)
+		{
+			var now = _owner._timeProvider.GetTimestamp();
+			bool hardTestResult;
+			if (_hardTestCacheExpireTime < now)
+			{
+				hardTestResult = false;
+				try
+				{
+					hardTestResult = await _owner._hardChannelTester.PerformTestAsync(_channel.Channel, monitoring);
+				}
+				catch { }
+
+				_lastHardTestResult = hardTestResult;
+				_hardTestCacheExpireTime = now + (long)(_owner._timeProvider.TimestampFrequency * _owner._options.HardTestMinInterval.TotalSeconds);
+			}
+			else hardTestResult = _lastHardTestResult;
+
+			return hardTestResult;
+		}
+
+		private void IgnoreAllPendingFailedTests()
+		{
+			var addToWAQIgnore = 0;
+            for (int i = 1; i <= _waq.Buffer.Size; i++)
+            {
+            	var test = _waq.Buffer[-i];
+            	if (test.IsSuccess == false)
+            		addToWAQIgnore++;
+            	else break;
+            }
+
+            _ignoreWAQElements += addToWAQIgnore;
+		}
+
+		private enum AvailabilityDecision
+		{
+			DoNotChange,
+			MakeUnavailable,
+			TryMakeAvailable
 		}
 	}
 

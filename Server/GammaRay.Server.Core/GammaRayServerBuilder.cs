@@ -142,6 +142,7 @@ public sealed class GammaRayServerBuilder
 			.Configure<DefaultIAPChannelMonitor.Options>(_ => { })
 			.AddSingleton<IIAPChannelMonitor, DefaultIAPChannelMonitor>()
 			.AddSingleton<IIAPChannelSimpleTester, IAPChannelSimpleTester>()
+			.AddSingleton<IIAPChannelHardTester, IAPChannelHardTester>()
 
 			.AddSingleton<IRouter, SmartRouter>()
 			.AddSingleton<IMasterServer, MasterServer>()

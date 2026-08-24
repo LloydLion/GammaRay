@@ -64,7 +64,7 @@ capabilityClasses:
       driver: HTTP
       parameters:
         useTLS: true
-        path: ""
+        path: "robots.txt"
         method: GET
   HTTP:
     detectionRules:
@@ -74,7 +74,7 @@ capabilityClasses:
       driver: HTTP
       parameters:
         useTLS: false
-        path: ""
+        path: "robots.txt"
         method: GET
 
 endpointRoutingConfigurations:
